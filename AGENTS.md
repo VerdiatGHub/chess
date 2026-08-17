@@ -110,6 +110,24 @@ Web service:
   present, and must run before `build`; skip `profile-build`, which doubles an
   already slow compile for perhaps 10%.
 
+## Board rendering
+
+- **a1 is dark.** a1 is fileIndex 0, rank 1, so a square is light exactly when
+  `(fileIndex + rank)` is **even**. The first version had this inverted and the
+  board looked subtly wrong in a way that is hard to see in a screenshot.
+- **Geometry lives in `static/board.js`**, separate from the DOM, so it can be
+  run under node and compared against python-chess. `tests/test_board_js.py`
+  checks all 64 squares rather than a handful. Load order matters: `board.js`
+  before `app.js`.
+- **Draw from `boardOrder(flipped)`** rather than doing the flip arithmetic
+  inline. It returns squares in drawing order with colour and coordinate flags
+  attached, so orientation is decided in one tested place.
+- **Pieces are lichess's cburnett SVGs** in `static/pieces/`, `wK.svg` style
+  names, CC-BY-SA. Unicode chess glyphs render inconsistently across platforms
+  and are what made the original board look broken.
+- **Highlight with flat washes, not inset borders.** An `inset box-shadow` under
+  an absolutely positioned piece reads as a rendering artefact.
+
 ## Upstream references
 
 - `ornicar/lichess-puzzler`, `tagger/cook.py` — tested motif detectors, but

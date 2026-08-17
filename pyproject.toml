@@ -28,7 +28,7 @@ decodex = "decodex.cli:main"
 packages = ["decodex"]
 
 [tool.setuptools.package-data]
-decodex = ["static/*"]
+decodex = ["static/*", "static/pieces/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -7,12 +7,21 @@
  * there is one authority on legality and the UI cannot drift from it.
  */
 
-const GLYPH = {
-  P: "\u2659", N: "\u2658", B: "\u2657", R: "\u2656", Q: "\u2655", K: "\u2654",
-  p: "\u265F", n: "\u265E", b: "\u265D", r: "\u265C", q: "\u265B", k: "\u265A",
+// Piece art is lichess's cburnett set, served from /assets/pieces.
+const PIECE_FILE = {
+  P: "wP", N: "wN", B: "wB", R: "wR", Q: "wQ", K: "wK",
+  p: "bP", n: "bN", b: "bB", r: "bR", q: "bQ", k: "bK",
 };
 
-const FILES = "abcdefgh";
+// Spoken labels, so the board is navigable without sight of it.
+const PIECE_NAME = {
+  P: "white pawn", N: "white knight", B: "white bishop",
+  R: "white rook", Q: "white queen", K: "white king",
+  p: "black pawn", n: "black knight", b: "black bishop",
+  r: "black rook", q: "black queen", k: "black king",
+};
+
+// FILES, isLightSquare and expandFen come from board.js, which is loaded first.
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const DRAGON_FEN = "2r1k2r/1pq1ppbp/p2pbnp1/8/3BP1P1/1BN2P2/PPPQ3P/1K1R3R w k - 1 15";
 
@@ -142,19 +151,12 @@ class Board {
   }
 
   render() {
-    const rows = this.fen.split(" ")[0].split("/");
-    const grid = [];
-    rows.forEach((row) => {
-      const line = [];
-      for (const ch of row) {
-        if (/\d/.test(ch)) {
-          for (let i = 0; i < Number(ch); i += 1) line.push(null);
-        } else {
-          line.push(ch);
-        }
-      }
-      grid.push(line);
-    });
+    const grid = expandFen(this.fen);
+    // A malformed FEN draws nothing rather than a ragged grid.
+    if (!grid) {
+      this.node.replaceChildren();
+      return;
+    }
 
     const targets = new Set(
       this.selected
@@ -162,33 +164,41 @@ class Board {
         : []
     );
 
-    const rankOrder = this.flipped ? [...grid].reverse() : grid;
     this.node.replaceChildren();
+    for (const cell of boardOrder(this.flipped)) {
+      // `grid` is indexed from rank 8 down, which is how a FEN is written.
+      const piece = grid[8 - cell.rank][cell.fileIndex];
+      const node = el("button", `sq ${cell.light ? "light" : "dark"}`);
+      node.type = "button";
+      node.dataset.square = cell.square;
+      node.setAttribute(
+        "aria-label",
+        piece ? `${PIECE_NAME[piece]} on ${cell.square}` : cell.square
+      );
 
-    rankOrder.forEach((line, rowIndex) => {
-      const rank = this.flipped ? rowIndex + 1 : 8 - rowIndex;
-      const cells = this.flipped ? [...line].reverse() : line;
-      cells.forEach((piece, colIndex) => {
-        const file = this.flipped ? FILES[7 - colIndex] : FILES[colIndex];
-        const square = `${file}${rank}`;
-        const dark = (FILES.indexOf(file) + rank) % 2 === 0;
-        const cell = el("button", `sq ${dark ? "dark" : "light"}`);
-        cell.type = "button";
-        cell.dataset.square = square;
-        cell.setAttribute("aria-label", piece ? `${piece} on ${square}` : square);
-        if (piece) {
-          cell.classList.add(piece === piece.toUpperCase() ? "w" : "b");
-          cell.append(el("span", "glyph", GLYPH[piece]));
-        }
-        if (square === this.selected) cell.classList.add("sel");
-        if (targets.has(square)) cell.classList.add("target");
-        if (this.lastMove && (square === this.lastMove.from || square === this.lastMove.to)) {
-          cell.classList.add("last");
-        }
-        if (rank === 1) cell.append(el("span", "coord", file));
-        this.node.append(cell);
-      });
-    });
+      if (piece) {
+        const img = el("img", "piece");
+        img.src = `/assets/pieces/${PIECE_FILE[piece]}.svg`;
+        img.alt = "";
+        img.draggable = false;
+        node.append(img);
+      }
+      if (cell.square === this.selected) node.classList.add("sel");
+      if (targets.has(cell.square)) {
+        node.classList.add(piece ? "capture" : "target");
+      }
+      if (this.lastMove &&
+          (cell.square === this.lastMove.from || cell.square === this.lastMove.to)) {
+        node.classList.add("last");
+      }
+      if (cell.showFile) {
+        node.append(el("span", "coord file", FILES[cell.fileIndex]));
+      }
+      if (cell.showRank) {
+        node.append(el("span", "coord rank", String(cell.rank)));
+      }
+      this.node.append(node);
+    }
   }
 }
 

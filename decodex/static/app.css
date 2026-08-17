@@ -11,8 +11,9 @@
   --rust: #b4553a;
   --sage: #7d9a6b;
   --slate: #5b7c99;
-  --light-sq: #b9b2a2;
-  --dark-sq: #6e6b62;
+  /* lichess's default brown board, which the cburnett pieces are drawn for. */
+  --light-sq: #f0d9b5;
+  --dark-sq: #b58863;
   --board-edge: #2a2721;
   --serif: "Spectral", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --mono: "JetBrains Mono", "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
@@ -165,7 +166,7 @@ body::before {
 
 .board-frame {
   background: var(--board-edge);
-  padding: 14px;
+  padding: 12px;
   border: 1px solid var(--rule);
   box-shadow: 0 26px 60px rgba(0, 0, 0, 0.55);
 }
@@ -173,21 +174,19 @@ body::before {
 .board {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
   aspect-ratio: 1;
   width: 100%;
 }
 
 .sq {
   position: relative;
-  display: grid;
-  place-items: center;
-  font-size: clamp(1.5rem, 4.4vw, 2.6rem);
-  line-height: 1;
+  display: block;
+  padding: 0;
+  border: none;
   cursor: pointer;
   user-select: none;
-  border: none;
-  padding: 0;
-  transition: box-shadow 0.12s;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .sq.light {
@@ -198,53 +197,93 @@ body::before {
   background: var(--dark-sq);
 }
 
-.sq .glyph {
-  position: relative;
+/* Pieces fill the square the way lichess and chess.com draw them: edge to edge,
+   with the SVG's own internal padding providing the visual margin. */
+.sq .piece {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
   z-index: 2;
 }
 
-.sq.w .glyph {
-  color: #fbf8f1;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
-}
-
-.sq.b .glyph {
-  color: #16181c;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-
-.sq.sel {
-  box-shadow: inset 0 0 0 4px var(--ochre);
-}
-
 .sq:focus-visible {
-  outline: 2px solid var(--ochre-bright);
-  outline-offset: -4px;
+  outline: 3px solid var(--ochre-bright);
+  outline-offset: -3px;
+  z-index: 5;
 }
 
-.sq.target::after {
+/* Selection and last-move are flat washes rather than inset borders, so a piece
+   never sits on top of an edge that reads as a rendering glitch. */
+.sq.last::before,
+.sq.sel::before {
   content: "";
   position: absolute;
-  width: 30%;
-  height: 30%;
-  border-radius: 50%;
-  background: rgba(200, 150, 62, 0.75);
+  inset: 0;
   z-index: 1;
 }
 
-.sq.last {
-  box-shadow: inset 0 0 0 3px rgba(125, 154, 107, 0.9);
+.sq.last::before {
+  background: rgba(200, 150, 62, 0.32);
+}
+
+.sq.sel::before {
+  background: rgba(200, 150, 62, 0.5);
+}
+
+/* An empty destination gets a dot, an occupied one a ring, so a capture is
+   distinguishable at a glance. */
+.sq.target::after,
+.sq.capture::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.sq.target::after {
+  left: 50%;
+  top: 50%;
+  width: 30%;
+  height: 30%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(24, 22, 18, 0.3);
+}
+
+.sq.capture::after {
+  inset: 5%;
+  border-radius: 50%;
+  border: 0.4vw solid rgba(24, 22, 18, 0.3);
 }
 
 .sq .coord {
   position: absolute;
-  bottom: 2px;
-  right: 3px;
   font-family: var(--mono);
-  font-size: 0.5rem;
-  letter-spacing: 0.04em;
-  color: rgba(20, 20, 20, 0.4);
-  z-index: 3;
+  font-size: clamp(0.45rem, 1.05vw, 0.6rem);
+  font-weight: 600;
+  line-height: 1;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.sq .coord.file {
+  bottom: 3px;
+  right: 4px;
+}
+
+.sq .coord.rank {
+  top: 3px;
+  left: 4px;
+}
+
+.sq.light .coord {
+  color: rgba(78, 72, 58, 0.72);
+}
+
+.sq.dark .coord {
+  color: rgba(232, 228, 218, 0.6);
 }
 
 .board-status {

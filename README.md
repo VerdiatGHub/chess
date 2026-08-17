@@ -111,6 +111,11 @@ Then open <http://localhost:8000>. Three tabs matching the CLI: a position to
 decode, a game to review, and a game against the bot with analysis available
 mid-game.
 
+The board uses lichess's cburnett piece set (`decodex/static/pieces/`, CC-BY-SA)
+on their standard brown squares, rather than Unicode chess glyphs, which render
+inconsistently across platforms. Board geometry lives in `decodex/static/board.js`
+apart from the DOM so it can be tested against python-chess directly.
+
 Or with Docker, which builds Stockfish from source so no engine install is
 needed:
 
