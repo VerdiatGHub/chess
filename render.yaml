@@ -1,0 +1,18 @@
+# Render deployment. Point Render at this repo; it reads this file.
+#
+# Note the plan: the free tier spins down when idle, and a cold start has to
+# reload Stockfish's 133 MB network before the first request answers, which
+# reads as a broken site. Use `starter` or higher if the endpoint is meant to be
+# reliably available.
+
+services:
+  - type: web
+    name: decodex
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: "8000"

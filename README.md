@@ -100,6 +100,61 @@ position, `review [side]` for the game so far, or `roles [side]`, `concepts` and
 `tactics` for a single panel without the full report. Also `board`, `pgn`,
 `undo`, `help`, `quit`.
 
+## Run it as a website
+
+```bash
+pip install -e ".[web]"
+uvicorn decodex.web:create_app --factory --port 8000
+```
+
+Then open <http://localhost:8000>. Three tabs matching the CLI: a position to
+decode, a game to review, and a game against the bot with analysis available
+mid-game.
+
+Or with Docker, which builds Stockfish from source so no engine install is
+needed:
+
+```bash
+docker build -t decodex .
+docker run -p 8000:8000 decodex
+```
+
+### Deploying it publicly
+
+`fly.toml` and `render.yaml` are ready to use. On Fly:
+
+```bash
+fly launch --no-deploy    # accepts the existing fly.toml
+fly deploy
+```
+
+The endpoint is unauthenticated by design, so every request is bounded before it
+reaches the engine:
+
+| Guard | Limit |
+| --- | --- |
+| Search depth | 18 for a position, 12 for a game |
+| Game length | 160 half-moves |
+| Input size | 120 chars of FEN, 24 KB of PGN |
+| Analysis calls | 12 burst, then 1 every 2 seconds per caller |
+| Rules calls | 90 burst, then 8 per second per caller |
+| Concurrent queue | 8 waiting, then 503 |
+| Engine hold | 60 seconds, then abandoned |
+
+Two things are worth understanding before you put this behind a domain.
+
+Analysis is CPU-bound and serialised. One Stockfish process serves everyone,
+behind a lock, because a second concurrent search would contend for the same
+cores and make both slower. Scale by adding machines, not workers or threads.
+
+The rate limiter keys on client address, which is spoofable. It exists to keep
+the service usable under casual load, not to establish identity. If you need
+real protection, put Cloudflare in front.
+
+Sizing: 1 GB of memory is the floor, since the NNUE network alone is 133 MB.
+Avoid platforms that spin down when idle — a cold start reloads that network
+before answering, which reads to a visitor as a broken site.
+
 ## What the facts are
 
 Search-derived:

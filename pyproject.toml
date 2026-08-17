@@ -10,13 +10,25 @@ requires-python = ">=3.10"
 dependencies = ["chess>=1.11"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+web = [
+  "fastapi==0.115.6",
+  "uvicorn[standard]==0.34.0",
+]
+dev = [
+  "pytest>=8",
+  "fastapi==0.115.6",
+  "uvicorn[standard]==0.34.0",
+  "httpx==0.28.1",
+]
 
 [project.scripts]
 decodex = "decodex.cli:main"
 
 [tool.setuptools]
 packages = ["decodex"]
+
+[tool.setuptools.package-data]
+decodex = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

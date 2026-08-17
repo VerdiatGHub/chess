@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, List, Optional
@@ -266,9 +267,17 @@ def _terminal_cp(board: chess.Board) -> int:
 
 def load_pgn(path: str) -> tuple[chess.Board, List[chess.Move], dict]:
     with open(path, encoding="utf-8") as handle:
-        game = chess.pgn.read_game(handle)
+        return _read_game(handle, path)
+
+
+def load_pgn_text(text: str) -> tuple[chess.Board, List[chess.Move], dict]:
+    return _read_game(io.StringIO(text), "the supplied PGN")
+
+
+def _read_game(handle, label: str) -> tuple[chess.Board, List[chess.Move], dict]:
+    game = chess.pgn.read_game(handle)
     if game is None:
-        raise ValueError(f"No game found in {path}")
+        raise ValueError(f"No game found in {label}")
     board = game.board()
     return board, list(game.mainline_moves()), dict(game.headers)
 

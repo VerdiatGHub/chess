@@ -27,6 +27,15 @@ Leaf first, so the dependency direction is one-way:
 - `decodex/play.py` — play-vs-bot session state.
 - `decodex/cli.py` — `position`, `game`, `play` subcommands.
 
+Web service:
+
+- `decodex/limits.py` — depth, size and rate ceilings for the public endpoint.
+- `decodex/pool.py` — the shared engine, lent out one request at a time.
+- `decodex/payload.py` — the same facts as JSON, for the browser.
+- `decodex/web.py` — FastAPI app; `create_app(engine_path, rate_limits=...)`.
+- `decodex/static/` — the UI. Plain HTML, CSS and JS, no build step.
+- `Dockerfile`, `fly.toml`, `render.yaml` — deployment.
+
 ## Environment
 
 - Stockfish is not in apt here. Installed 17.1 from the official GitHub release
@@ -77,6 +86,29 @@ Leaf first, so the dependency direction is one-way:
   searches `multipv=2` and `swing_cp` measures the gap.
 - **Scale the eval graph to the game.** A fixed range flattens a quiet game into
   one repeated block.
+
+## Web service lessons
+
+- **The engine is global state.** `Skill Level` set for a weak bot move stays set
+  for the whole process, so a single play request would otherwise cripple every
+  later analysis for everyone. Restore it in a `finally`.
+- **Rate limit in two tiers.** Searches cost CPU seconds; legality checks cost
+  microseconds. One shared budget makes the board unusable long before the engine
+  is under strain, so `/api/legal` gets its own generous bucket.
+- **Bound the queue, not just the rate.** Without `MAX_QUEUE_DEPTH` a crowd simply
+  grows the queue until everybody times out. Fast 503 beats slow failure.
+- **Cap the limiter's own memory.** A dict keyed by client address is itself an
+  exhaustion vector on a public endpoint.
+- **Tests need the throttle open.** `create_app(rate_limits=...)` exists so
+  functional tests are not silently answered with 429; the limiter is tested
+  separately against its own app.
+- **Docker: `COPY` preserves source permissions.** This checkout is `rw-rw----`,
+  so the unprivileged runtime user could not read its own code. `chmod -R a+rX`
+  after copying.
+- **Docker: build Stockfish from source, `ARCH=x86-64`.** Release tarballs target
+  avx2/bmi2 and die with SIGILL on hosts without them. `make net` needs curl
+  present, and must run before `build`; skip `profile-build`, which doubles an
+  already slow compile for perhaps 10%.
 
 ## Upstream references
 

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>decodex — chess explanations from verifiable facts</title>
+<meta name="description" content="Free chess analysis that explains itself. Stockfish for search, static rules for the reasoning, and no invented tactics.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<div class="shell">
+
+  <header class="masthead">
+    <div>
+      <h1 class="wordmark">deco<em>dex</em></h1>
+      <p class="tagline">
+        Chess analysis that explains itself. Every statement below is derived from
+        search or board geometry — never guessed, never inferred.
+      </p>
+    </div>
+    <div class="masthead-meta">
+      <div>Stockfish · <b id="engine-name">loading</b></div>
+      <div id="limits-note">depth ceiling —</div>
+      <div>free · no account</div>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-position" aria-selected="true" aria-controls="panel-position">Position</button>
+    <button class="tab" role="tab" id="tab-game" aria-selected="false" aria-controls="panel-game">Game</button>
+    <button class="tab" role="tab" id="tab-play" aria-selected="false" aria-controls="panel-play">Play</button>
+  </div>
+
+  <!-- ---------------- POSITION ---------------- -->
+  <section class="panel" id="panel-position" role="tabpanel" aria-labelledby="tab-position">
+    <div class="split">
+      <div>
+        <div class="board-frame">
+          <div class="board" id="pos-board" aria-label="Position to analyse"></div>
+        </div>
+        <div class="board-status">
+          <span id="pos-turn">White to move</span>
+          <span class="eval" id="pos-eval"></span>
+        </div>
+
+        <div class="controls">
+          <div class="field">
+            <label for="pos-fen">FEN</label>
+            <input type="text" id="pos-fen" spellcheck="false"
+                   value="2r1k2r/1pq1ppbp/p2pbnp1/8/3BP1P1/1BN2P2/PPPQ3P/1K1R3R w k - 1 15">
+          </div>
+          <div class="field">
+            <label>Explain for</label>
+            <div class="segmented" id="pos-side" role="group" aria-label="Which side to explain">
+              <button data-side="white" aria-pressed="true">White</button>
+              <button data-side="black" aria-pressed="false">Black</button>
+              <button data-side="both" aria-pressed="false">Both</button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="pos-depth">Depth</label>
+              <select id="pos-depth"></select>
+            </div>
+            <div class="field">
+              <label for="pos-multipv">Lines</label>
+              <select id="pos-multipv">
+                <option value="1">1</option>
+                <option value="3" selected>3</option>
+                <option value="5">5</option>
+              </select>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="pos-go">Decode position</button>
+            <button class="btn ghost" id="pos-reset">Start position</button>
+          </div>
+          <div class="status-line" id="pos-status"></div>
+        </div>
+      </div>
+
+      <div class="report" id="pos-report">
+        <div class="empty">
+          The position on the left is move 15 of a Sicilian Dragon.
+          Press <strong>Decode position</strong>, or paste any FEN.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------- GAME ---------------- -->
+  <section class="panel" id="panel-game" role="tabpanel" aria-labelledby="tab-game" hidden>
+    <div class="split">
+      <div class="controls" style="margin-top:0">
+        <div class="field">
+          <label for="game-moves">Moves or PGN</label>
+          <textarea id="game-moves" spellcheck="false">1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 g6 6. f3 Nc6 7. Be3 Bg7 8. Qd2 Qa5 9. O-O-O Nxd4 10. Bxd4 a6 11. Bc4 Qc7 12. Bb3 Be6 13. Kb1 Rd8 14. g4 Rc8</textarea>
+        </div>
+        <div class="field">
+          <label>Review for</label>
+          <div class="segmented" id="game-side" role="group" aria-label="Which side to review">
+            <button data-side="white" aria-pressed="false">White</button>
+            <button data-side="black" aria-pressed="false">Black</button>
+            <button data-side="both" aria-pressed="true">Both</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="game-depth">Depth</label>
+          <select id="game-depth"></select>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="game-go">Review game</button>
+        </div>
+        <div class="status-line" id="game-status"></div>
+      </div>
+
+      <div class="report" id="game-report">
+        <div class="empty">
+          Paste a move list or a full PGN. Move numbers and result markers are fine.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------- PLAY ---------------- -->
+  <section class="panel" id="panel-play" role="tabpanel" aria-labelledby="tab-play" hidden>
+    <div class="split">
+      <div>
+        <div class="board-frame">
+          <div class="board" id="play-board" aria-label="Your game against the engine"></div>
+        </div>
+        <div class="board-status">
+          <span id="play-status-text">Your move</span>
+          <span class="eval" id="play-last"></span>
+        </div>
+
+        <div class="controls">
+          <div class="row">
+            <div class="field">
+              <label for="play-skill">Bot skill (0–20)</label>
+              <select id="play-skill"></select>
+            </div>
+            <div class="field">
+              <label for="play-colour">You play</label>
+              <select id="play-colour">
+                <option value="white" selected>White</option>
+                <option value="black">Black</option>
+              </select>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn ghost" id="play-undo">Undo</button>
+            <button class="btn ghost" id="play-new">New game</button>
+          </div>
+          <div class="field">
+            <label>Analyse without leaving the game</label>
+            <div class="btn-row">
+              <button class="btn" id="play-decode">Decode position</button>
+              <button class="btn ghost" id="play-review">Review so far</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Analyse for</label>
+            <div class="segmented" id="play-side" role="group" aria-label="Which side to analyse">
+              <button data-side="white" aria-pressed="true">White</button>
+              <button data-side="black" aria-pressed="false">Black</button>
+              <button data-side="both" aria-pressed="false">Both</button>
+            </div>
+          </div>
+          <div class="status-line" id="play-status"></div>
+        </div>
+      </div>
+
+      <div class="report" id="play-report">
+        <div class="empty">
+          Click a piece, then its destination. Analyse the current position or the
+          game so far at any point, for either side.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>Stockfish (GPL) · python-chess (MIT) · no LLM, no paid API</span>
+    <span>
+      <a href="https://github.com/VerdiatGHub/chess" target="_blank" rel="noopener">Source on GitHub</a>
+    </span>
+  </footer>
+</div>
+
+<script src="/assets/app.js"></script>
+</body>
+</html>
