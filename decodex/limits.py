@@ -9,16 +9,35 @@ on how often anyone may ask.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
+
+def _env_int(name: str, default: int) -> int:
+    """Read a ceiling from the environment, ignoring nonsense.
+
+    Small hosts need lower ceilings than a laptop, and a deploy config is the
+    right place to say so. A bad value falls back to the default rather than
+    taking the service down at import time.
+    """
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 # Work limits. Depth is the dominant cost: each extra ply roughly doubles the
 # search, so the ceiling is what actually protects the CPU.
-MAX_POSITION_DEPTH = 18
-MAX_GAME_DEPTH = 12
-MAX_PLIES = 160
+MAX_POSITION_DEPTH = _env_int("DECODEX_MAX_POSITION_DEPTH", 18)
+MAX_GAME_DEPTH = _env_int("DECODEX_MAX_GAME_DEPTH", 12)
+MAX_PLIES = _env_int("DECODEX_MAX_PLIES", 160)
 MAX_MULTIPV = 5
 MAX_SKILL = 20
 MAX_BOT_MOVE_TIME = 1.0

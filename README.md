@@ -126,12 +126,19 @@ docker run -p 8000:8000 decodex
 
 ### Deploying it publicly
 
-`fly.toml` and `render.yaml` are ready to use. On Fly:
+See **[DEPLOY.md](DEPLOY.md)** for the current state of the free options, which
+is less rosy than most guides suggest — Fly and Heroku no longer have free tiers,
+and Hugging Face now needs PRO for Docker Spaces.
 
-```bash
-fly launch --no-deploy    # accepts the existing fly.toml
-fly deploy
-```
+The short version: **Render's free plan works** and `render.yaml` is configured
+for it. Push to GitHub, then New → Blueprint on Render. It sleeps after 15
+minutes idle and takes ~50 seconds to wake, which an external pinger every 10
+minutes will prevent.
+
+On a 512 MB host, set `DECODEX_LEAN=1`. That runs one engine process instead of
+two, ~310 MB instead of ~675 MB. The only casualty is the NNUE piece-importance
+panel, which needs a second Stockfish to answer `eval`; every other fact is
+unaffected.
 
 The endpoint is unauthenticated by design, so every request is bounded before it
 reaches the engine:

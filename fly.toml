@@ -1,8 +1,13 @@
-# Fly.io deployment. `fly launch --no-deploy` then `fly deploy`.
+# Fly.io deployment.
 #
-# The service is CPU-bound and holds one Stockfish process in memory, so it is
-# sized for a single always-on machine rather than autoscaling: a cold start
-# would have to reload the 133 MB NNUE network before answering.
+# NOTE: Fly removed its permanent free tier in 2024. New accounts pay from the
+# first machine, so this config is correct but not free. Kept because the sizing
+# and concurrency settings are still the right ones if you are paying. See
+# DEPLOY.md for the options that are actually free.
+#
+# The service is CPU-bound and holds Stockfish in memory, so it is sized for a
+# single always-on machine rather than autoscaling: a cold start would have to
+# reload the NNUE network before answering.
 
 app = "decodex"
 primary_region = "lhr"

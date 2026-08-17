@@ -292,7 +292,7 @@ def contributions_from_trace(
 def analyse_position(
     board: chess.Board,
     engine: chess.engine.SimpleEngine,
-    raw: RawEngine,
+    raw: Optional[RawEngine] = None,
     *,
     perspective: chess.Color,
     depth: int = 18,
@@ -303,18 +303,26 @@ def analyse_position(
 
     When `perspective` is not the side to move, the position is analysed through
     a null move so that the requested side's own plans can be described.
+
+    `raw` is optional. It provides the NNUE piece-importance table, which needs
+    Stockfish's non-standard `eval` command on a second process; without it that
+    one panel is omitted and everything else is unaffected. Small hosts cannot
+    afford the second process, so this has to degrade rather than fail.
     """
     limit = chess.engine.Limit(depth=depth)
     threat_limit = chess.engine.Limit(depth=threat_depth)
 
-    trace = raw.eval_trace(board)
+    trace = raw.eval_trace(board) if raw is not None else None
+    eval_cp = trace.final_cp if trace is not None else None
     facts = PositionFacts(
         fen=board.fen(),
         perspective=perspective,
         turn=board.turn,
         free_tempo_view=perspective != board.turn,
-        eval_cp=trace.final_cp,
-        contributions=contributions_from_trace(trace, perspective),
+        eval_cp=eval_cp,
+        contributions=(
+            contributions_from_trace(trace, perspective) if trace is not None else []
+        ),
         roles=describe_roles(board, perspective),
         concepts=describe_concepts(board),
         observations=describe_relations(board),
@@ -332,7 +340,7 @@ def analyse_position(
                 "free tempo; showing threats only."
             )
             facts.threat_before = threat_of_side_to_move(
-                board, engine, threat_limit, free_tempo=False, baseline_cp=trace.final_cp
+                board, engine, threat_limit, free_tempo=False, baseline_cp=eval_cp
             )
             return facts
         view = hand_tempo(board)
@@ -357,21 +365,28 @@ def analyse_position(
         if rank == 1:
             facts.purposes = explain_move(view, pv)
 
+    # Without the eval trace there is still a number to anchor threats against:
+    # the score of the best line, which the search has already produced.
+    if facts.eval_cp is None and facts.candidates:
+        facts.eval_cp = facts.candidates[0].cp_white
+        eval_cp = facts.eval_cp
+
     facts.hanging = find_hanging(view)
-    facts.threat_before = free_tempo_threat(view, engine, threat_limit, trace.final_cp)
+    facts.threat_before = free_tempo_threat(view, engine, threat_limit, eval_cp)
 
     if facts.candidates:
         after = view.copy(stack=False)
         after.push(chess.Move.from_uci(facts.candidates[0].uci))
         facts.threat_after_best = threat_of_side_to_move(
-            after, engine, threat_limit, free_tempo=False, baseline_cp=trace.final_cp
+            after, engine, threat_limit, free_tempo=False, baseline_cp=eval_cp
         )
         facts.neutralised, facts.created = _diff_threats(
             view, after, facts.threat_before
         )
-        facts.contributions = contributions_from_trace(
-            trace, perspective, after=raw.eval_trace(after)
-        )
+        if trace is not None and raw is not None:
+            facts.contributions = contributions_from_trace(
+                trace, perspective, after=raw.eval_trace(after)
+            )
 
     return facts
 

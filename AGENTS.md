@@ -30,11 +30,14 @@ Leaf first, so the dependency direction is one-way:
 Web service:
 
 - `decodex/limits.py` — depth, size and rate ceilings for the public endpoint.
+  Depth ceilings are overridable via `DECODEX_MAX_*` env vars, because a 0.1 vCPU
+  host needs lower ones than a laptop.
 - `decodex/pool.py` — the shared engine, lent out one request at a time.
+  `DECODEX_LEAN=1` runs a single process for 512 MB hosts.
 - `decodex/payload.py` — the same facts as JSON, for the browser.
 - `decodex/web.py` — FastAPI app; `create_app(engine_path, rate_limits=...)`.
 - `decodex/static/` — the UI. Plain HTML, CSS and JS, no build step.
-- `Dockerfile`, `fly.toml`, `render.yaml` — deployment.
+- `Dockerfile`, `render.yaml`, `fly.toml`, `DEPLOY.md` — deployment.
 
 ## Environment
 
@@ -127,6 +130,26 @@ Web service:
   and are what made the original board look broken.
 - **Highlight with flat washes, not inset borders.** An `inset box-shadow` under
   an absolutely positioned piece reads as a rendering artefact.
+
+## Hosting reality, early 2026
+
+- **Measured footprint:** two engine processes cost ~675 MB resident, one costs
+  ~310 MB. The 512 MB free tiers therefore need `DECODEX_LEAN=1`. Only the NNUE
+  ablation panel needs the second process, so lean mode degrades one panel and
+  keeps everything else.
+- **On 0.1 vCPU** (Render free), depth 14 on one position takes ~5 s and a
+  28-ply game review at depth 10 takes ~17 s. Usable, not fast. Verified in a
+  container capped with `--memory 512m --cpus 0.1`.
+- **Free tiers that no longer exist:** Fly.io (removed 2024), Heroku (2022),
+  Hugging Face Docker Spaces (now needs PRO; static Spaces still free). Most
+  online guides are stale on all three.
+- **Render free still works** without a credit card, but sleeps after 15 minutes
+  and takes ~50 s to wake because the NNUE net reloads. 750 instance-hours a
+  month against 730 hours in a month, so an external pinger can keep it warm.
+- **The permanent answer is client-side.** Stockfish compiles to WASM, which
+  makes the whole thing static and free forever, at the cost of porting the fact
+  layers to JS. Multi-threaded WASM needs COOP/COEP headers, which GitHub Pages
+  does not send.
 
 ## Upstream references
 

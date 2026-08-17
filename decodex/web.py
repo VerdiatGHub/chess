@@ -170,12 +170,16 @@ def create_app(
     @app.get("/api/limits")
     def read_limits() -> Dict[str, Any]:
         """Published so the UI can show the ceilings rather than guess them."""
+        engine = pool.get("engine")
         return {
             "maxPositionDepth": MAX_POSITION_DEPTH,
             "maxGameDepth": MAX_GAME_DEPTH,
             "maxPlies": MAX_PLIES,
             "maxMultipv": MAX_MULTIPV,
-            "engine": Path(pool["engine"].path).name if "engine" in pool else None,
+            "engine": Path(engine.path).name if engine else None,
+            # Lean hosts run one engine process and lose the NNUE panel, so the
+            # UI can stop promising a section it will never receive.
+            "lean": engine.lean if engine else False,
         }
 
     @app.post("/api/position")

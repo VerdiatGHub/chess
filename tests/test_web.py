@@ -228,3 +228,45 @@ def test_cheap_calls_are_not_throttled_like_searches(engine_path):
             for _ in range(30)
         }
         assert codes == {200}
+
+
+def test_lean_mode_serves_every_fact_except_the_nnue_panel(engine_path, monkeypatch):
+    """A 512 MB host cannot afford two engine processes.
+
+    Only the NNUE piece-importance table needs the second one, so lean mode has
+    to drop that panel and keep everything else working rather than fail.
+    """
+    monkeypatch.setenv("DECODEX_LEAN", "1")
+    generous = RateLimits(
+        heavy_capacity=10_000, heavy_refill=10_000, cheap_capacity=10_000, cheap_refill=10_000
+    )
+    with TestClient(create_app(engine_path, rate_limits=generous)) as client:
+        assert client.get("/api/limits").json()["lean"] is True
+
+        view = client.post(
+            "/api/position", json={"fen": DRAGON, "side": "white", "depth": 10}
+        ).json()["views"][0]
+
+        # The one casualty.
+        assert view["contributions"] == []
+        # Everything else still arrives, including an evaluation, which now comes
+        # from the best line rather than from the eval trace.
+        assert view["evalCp"] is not None
+        assert "advantage" in view["summary"]
+        assert view["candidates"]
+        assert any("pinned" in line for line in view["tactics"])
+        assert view["roles"]
+        assert view["concepts"]
+        assert view["observations"]
+        assert view["threatBefore"]
+
+        # And a game review, which never used the eval trace, is unaffected.
+        game = client.post(
+            "/api/game", json={"moves": "e4 e5 Bc4 Nc6 Qh5 Nf6 Qxf7#", "depth": 8}
+        ).json()
+        assert game["result"] == "1-0"
+
+
+def test_lean_mode_is_off_by_default(engine_path):
+    with TestClient(create_app(engine_path)) as client:
+        assert client.get("/api/limits").json()["lean"] is False

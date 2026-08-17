@@ -1,18 +1,27 @@
-# Render deployment. Point Render at this repo; it reads this file.
+# Render deployment, sized for the free plan.
 #
-# Note the plan: the free tier spins down when idle, and a cold start has to
-# reload Stockfish's 133 MB network before the first request answers, which
-# reads as a broken site. Use `starter` or higher if the endpoint is meant to be
-# reliably available.
+# Free gives 512 MB RAM and 0.1 vCPU. DECODEX_LEAN runs a single engine process
+# (~310 MB resident instead of ~675 MB) and the depth ceilings are lowered to
+# keep a tenth of a core responsive. The cost is the NNUE piece-importance panel,
+# which needs a second Stockfish process to answer `eval`.
+#
+# Free services sleep after 15 minutes idle and take roughly 50 seconds to wake,
+# because the NNUE network reloads. Move to `starter` to stay warm.
 
 services:
   - type: web
     name: decodex
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: starter
+    plan: free
     region: frankfurt
     healthCheckPath: /healthz
     envVars:
       - key: PORT
         value: "8000"
+      - key: DECODEX_LEAN
+        value: "1"
+      - key: DECODEX_MAX_POSITION_DEPTH
+        value: "14"
+      - key: DECODEX_MAX_GAME_DEPTH
+        value: "10"
