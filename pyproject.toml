@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "decodex"
+version = "0.1.0"
+description = "Explain chess engine moves from verifiable facts"
+requires-python = ">=3.10"
+dependencies = ["chess>=1.11"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+decodex = "decodex.cli:main"
+
+[tool.setuptools]
+packages = ["decodex"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["engine: requires a local UCI engine binary"]
