@@ -44,6 +44,7 @@ from .limits import (
     clamp_depth,
 )
 from .payload import game_payload, position_payload
+from .opening import opening_name_from_board
 from .pool import EngineBusy, EnginePool
 
 log = logging.getLogger("decodex.web")
@@ -232,7 +233,8 @@ def create_app(
 
         with pool["engine"].borrow() as (search, _raw):
             review = review_game(board, moves, search, depth=depth)
-        payload = game_payload(review, colors, headers)
+        opening = opening_name_from_board(board)
+        payload = game_payload(review, colors, headers, opening=opening)
         payload["depth"] = depth
         return payload
 
@@ -256,6 +258,7 @@ def create_app(
             "over": board.is_game_over(),
             "result": board.result() if board.is_game_over() else "*",
             "status": _status_text(board),
+            "opening": opening_name_from_board(board),
         }
 
     @app.post("/api/play")

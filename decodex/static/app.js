@@ -829,8 +829,9 @@ function renderGame(target, data, bind = noBind) {
     ? `${data.white || "?"} vs ${data.black || "?"}`
     : "Game review";
   head.append(el("p", "verdict", names));
+  const opening = data.opening ? ` · Opening: ${data.opening}` : "";
   head.append(
-    el("p", "note", `Result ${data.result} · ${data.moves.length} half-moves · depth ${data.depth}`)
+    el("p", "note", `Result ${data.result} · ${data.moves.length} half-moves · depth ${data.depth}${opening}`)
   );
   target.append(head);
 
@@ -1168,6 +1169,7 @@ function wirePlay(limits) {
     const data = await api("/api/legal", { moves });
     board.setPosition(data.fen, data.over ? [] : data.legal);
     $("play-status-text").textContent = data.status;
+    $("play-opening").textContent = data.opening || "";
     return data;
   }
 

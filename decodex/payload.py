@@ -218,6 +218,7 @@ def game_payload(
     review: GameReview,
     colors: List[chess.Color],
     headers: Optional[dict] = None,
+    opening: Optional[str] = None,
 ) -> Dict[str, Any]:
     return {
         "result": review.result,
@@ -226,4 +227,5 @@ def game_payload(
         "graph": [move.cp_after_white for move in review.moves],
         "sides": [_side_payload(review, color) for color in colors],
         "moves": [_move_payload(move) for move in review.moves],
+        "opening": opening,
     }
