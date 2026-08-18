@@ -304,7 +304,7 @@ class Board {
       if (targets.has(cell.square)) {
         node.classList.add(piece ? "capture" : "target");
       }
-      if (this.lastMove && !this.cue &&
+      if (this.lastMove &&
           (cell.square === this.lastMove.from || cell.square === this.lastMove.to)) {
         node.classList.add("last");
       }
@@ -342,7 +342,7 @@ function cueBinder(board, onLabel) {
   const label = (text) => {
     if (onLabel) onLabel(text);
   };
-  return function bind(node, cue, fen, text) {
+  function bind(node, cue, fen, text) {
     if (!cue || (!cue.marks.length && !cue.arrows.length)) return node;
     node.classList.add("cued");
     // Focusable, so the geometry is reachable without a pointer. The nodes are
@@ -388,7 +388,15 @@ function cueBinder(board, onLabel) {
       toggle();
     });
     return node;
+  }
+  bind.release = (node) => {
+    if (pinned && pinned !== node) {
+      pinned.classList.remove("pinned");
+      pinned.setAttribute("aria-pressed", "false");
+    }
+    pinned = node || null;
   };
+  return bind;
 }
 
 /* A binder that does nothing, for reports rendered without a board. */
@@ -591,10 +599,17 @@ function pvLine(candidate, bind = noBind, onSelect) {
     if (prefix) row.append(el("span", "pv-num", prefix));
     const move = el("button", "pv-move", ply.san);
     move.type = "button";
-    bind(move, ply.cue, ply.fenBefore, plyCaption(ply));
+    move.addEventListener("mouseenter", () => {
+      if (typeof bind.release === "function") bind.release(move);
+      if (onSelect) onSelect(ply, { preview: true });
+    });
+    move.addEventListener("focusin", () => {
+      if (onSelect) onSelect(ply, { preview: true });
+    });
     move.addEventListener("click", (event) => {
       event.stopPropagation();
       mark(move);
+      if (typeof bind.release === "function") bind.release(move);
       if (onSelect) onSelect(ply);
     });
     buttons.push(move);
@@ -1022,21 +1037,19 @@ function wireTabs() {
   });
 }
 
-function showLinePly(board, ply, { turn } = {}) {
+function showLinePly(board, ply, { turn, preview } = {}) {
   const after = ply.fenAfter || ply.fenBefore;
-  const before = ply.fenBefore || after;
   board.lastMove = ply.uci
     ? { from: ply.uci.slice(0, 2), to: ply.uci.slice(2, 4) }
     : null;
-  // Draw the position after the clicked ply, with the move's arrow measured
-  // on the position it was played from.
+  // DecodeChess shows the position after the clicked ply, with that ply's
+  // arrow still drawn on the resulting board.
   board.setPosition(after);
-  // Keep the after-position on the board. Arrow geometry uses square names,
-  // so it still draws correctly without snapping back to fenBefore.
   board.showCue(ply.cue);
   if (turn) {
     const side = (after.split(" ")[1] === "b") ? "Black" : "White";
-    turn.textContent = `${side} to move · ${plyCaption(ply)}`;
+    const mode = preview ? "preview" : "showing";
+    turn.textContent = `${side} to move · ${mode} ${plyCaption(ply)}`;
   }
 }
 
