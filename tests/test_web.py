@@ -54,6 +54,9 @@ def test_position_returns_facts_for_one_side(client):
     assert "advantage" in view["summary"]
     assert view["candidates"]
     assert view["candidates"][0]["san"]
+    assert view["candidates"][0]["linePlies"]
+    assert view["candidates"][0]["linePlies"][0]["san"] == view["candidates"][0]["san"]
+    assert view["candidates"][0]["linePlies"][0]["cue"]["arrows"]
     # The pin is board geometry, so it must be present regardless of depth.
     assert any("pinned" in item["text"] for item in view["tactics"])
     assert view["roles"]

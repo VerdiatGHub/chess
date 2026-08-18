@@ -399,9 +399,11 @@ function createReportTabs(cards) {
       category = "Summary";
     } else {
       const title = titleEl.textContent || "";
-      if (title.includes("Best moves")) {
+      if (title.includes("Explaining the best line") || title.includes("Other lines")) {
+        category = "Summary";
+      } else if (title.includes("Best moves")) {
         category = "Plans";
-      } else if (title.includes("is good because")) {
+      } else if (title.includes("is good because") || title.includes("is beneficial")) {
         category = "Plans";
       } else if (title.includes("Threats") || title.includes("defuses") || title.includes("concedes") ||
                  title.includes("Before:") || title.includes("After")) {
@@ -502,6 +504,52 @@ function createReportTabs(cards) {
   return tabContainer;
 }
 
+function plyLabel(ply, previous) {
+  if (!previous || previous.color === "Black") {
+    return `${ply.moveNumber}.`;
+  }
+  return "";
+}
+
+function pvLine(candidate, bind = noBind) {
+  const row = el("div", "pv-line");
+  const plies = candidate.linePlies && candidate.linePlies.length
+    ? candidate.linePlies
+    : [];
+  if (!plies.length) {
+    row.append(el("span", "pv", candidate.line));
+    return row;
+  }
+  plies.forEach((ply, index) => {
+    const prefix = plyLabel(ply, plies[index - 1]);
+    if (prefix) row.append(el("span", "pv-num", prefix));
+    const move = el("button", "pv-move", ply.san);
+    move.type = "button";
+    bind(move, ply.cue, undefined, `${ply.moveNumber}${ply.color === "White" ? "." : "..."} ${ply.san}`);
+    row.append(move);
+  });
+  return row;
+}
+
+function bestLineCard(view, bind = noBind) {
+  const best = view.candidates[0];
+  const box = card("Explaining the best line of Stockfish NNUE", "nnue-line");
+  const intro = el("div", "best-line");
+  const bullet = el("div", "best-line-row");
+  bullet.append(el("span", "best-dot", "•"));
+  bullet.append(pvLine(best, bind));
+  intro.append(bullet);
+  box.append(intro);
+
+  if (view.purposes.length) {
+    const reasons = el("div", "because");
+    reasons.append(el("p", "because-title", `${best.san} is beneficial because it`));
+    reasons.append(factList(view.purposes, "because-list", bind));
+    box.append(reasons);
+  }
+  return box;
+}
+
 function positionCards(view, depth, bind = noBind) {
   const cards = [];
 
@@ -526,27 +574,24 @@ function positionCards(view, depth, bind = noBind) {
   if (view.note) hero.append(el("p", "note", view.note));
   cards.push(hero);
 
-  // Best moves
-  if (view.candidates.length) {
-    const box = card(`Best moves for ${view.perspective}`);
+  const best = view.candidates[0];
+  if (best) {
+    cards.push(bestLineCard(view, bind));
+  }
+
+  // Alternate lines stay available, but the first line lives in the explainer.
+  if (view.candidates.length > 1) {
+    const box = card(`Other lines for ${view.perspective}`);
     const lines = el("div", "lines");
-    view.candidates.forEach((c) => {
-      const line = el("div", c.rank === 1 ? "line top" : "line");
+    view.candidates.slice(1).forEach((c) => {
+      const line = el("div", "line");
       line.append(el("span", "move", `${c.rank}. ${c.san}`));
       line.append(el("span", "score", scoreText(c.evalCp, c.mate)));
-      line.append(el("span", "pv", c.line));
+      line.append(pvLine(c, bind));
       bind(line, c.cue);
       lines.append(line);
     });
     box.append(lines);
-    cards.push(box);
-  }
-
-  // Plans (from purposes)
-  if (view.purposes.length) {
-    const best = view.candidates[0] ? view.candidates[0].san : "The best move";
-    const box = card(`${best} is good because it`);
-    box.append(factList(view.purposes, null, bind));
     cards.push(box);
   }
 

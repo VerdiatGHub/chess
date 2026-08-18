@@ -78,6 +78,17 @@ def position_payload(facts: PositionFacts) -> Dict[str, Any]:
                 "evalCp": candidate.cp_white,
                 "mate": candidate.mate,
                 "line": candidate.pv_san,
+                "linePlies": [
+                    {
+                        "ply": ply.ply,
+                        "moveNumber": ply.move_number,
+                        "color": side_word(ply.color),
+                        "san": ply.san,
+                        "uci": ply.uci,
+                        "cue": _cue(ply.cue),
+                    }
+                    for ply in candidate.line
+                ],
                 "cue": _cue(candidate.cue),
             }
             for candidate in facts.candidates

@@ -84,6 +84,18 @@ def mate_in(info: chess.engine.InfoDict) -> Optional[int]:
 
 
 @dataclass(frozen=True)
+class LinePly:
+    """One half-move of a principal variation, with the geometry of that ply."""
+
+    ply: int
+    move_number: int
+    color: chess.Color
+    san: str
+    uci: str
+    cue: Cue = field(default_factory=Cue)
+
+
+@dataclass(frozen=True)
 class Candidate:
     rank: int
     uci: str
@@ -92,6 +104,7 @@ class Candidate:
     mate: Optional[int]
     pv_san: str
     cue: Cue = field(default_factory=Cue)
+    line: List[LinePly] = field(default_factory=list)
 
     @property
     def is_mate(self) -> bool:
@@ -112,6 +125,30 @@ def candidate_cue(board: chess.Board, pv: Sequence[chess.Move], *, depth: int = 
         arrow(move.from_square, move.to_square, "plan") for move in pv[1:depth]
     ]
     return cue(actors=[first.from_square], zone=[first.to_square], arrows=arrows)
+
+
+def line_plies(board: chess.Board, pv: Sequence[chess.Move], *, limit: int = 16) -> List[LinePly]:
+    """Each ply of the engine line, so the UI can hover one move at a time.
+
+    The sentence for the whole line is still `pv_san`. These objects exist so a
+    reader can ask what a later move in that line actually is, without the
+    reporter inventing a reason for it.
+    """
+    steps: List[LinePly] = []
+    walker = board.copy(stack=False)
+    for index, move in enumerate(pv[:limit]):
+        steps.append(
+            LinePly(
+                ply=index,
+                move_number=walker.fullmove_number,
+                color=walker.turn,
+                san=walker.san(move),
+                uci=move.uci(),
+                cue=move_cue(move, tone="move" if index == 0 else "plan"),
+            )
+        )
+        walker.push(move)
+    return steps
 
 
 @dataclass(frozen=True)
@@ -389,8 +426,9 @@ def analyse_position(
                 san=view.san(pv[0]),
                 cp_white=score_cp(info),
                 mate=mate_in(info),
-                pv_san=view.variation_san(pv[:8]),
+                pv_san=view.variation_san(pv[:16]),
                 cue=candidate_cue(view, pv),
+                line=line_plies(view, pv),
             )
         )
         if rank == 1:

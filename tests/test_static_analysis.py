@@ -21,6 +21,7 @@ from decodex.motifs import (
     relation_insights,
     tactic_insights,
 )
+from decodex.facts import line_plies
 from decodex.plans import explain_move
 from decodex.roles import describe_roles
 from decodex.values import join_words, with_turn
@@ -199,6 +200,22 @@ def test_purpose_reads_a_prepared_advance_out_of_the_line():
 
 def test_no_line_means_no_claimed_purpose():
     assert explain_move(chess.Board(), []) == []
+
+
+def test_line_plies_keep_each_move_and_its_squares():
+    board = chess.Board(DRAGON)
+    pv = []
+    walker = board.copy()
+    for san in ("h4", "Rg8", "h5"):
+        move = walker.parse_san(san)
+        pv.append(move)
+        walker.push(move)
+    plies = line_plies(board, pv)
+    assert [ply.san for ply in plies] == ["h4", "Rg8", "h5"]
+    assert plies[0].move_number == 15
+    assert plies[0].cue.arrows[0].tone == "move"
+    assert plies[1].cue.arrows[0].tone == "plan"
+    assert plies[2].uci == "h4h5"
 
 
 def test_purpose_reports_castling_and_promotion():
