@@ -111,7 +111,7 @@ function fillRange(select, from, to, selected) {
 
 // Arrowheads are drawn as polygons rather than SVG markers, because a marker
 // scales with stroke width and the tone colours use different widths.
-const ARROW_HEAD = 0.3;
+const ARROW_HEAD = 0.1;
 const ARROW_HALF_WIDTH = 0.15;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -371,8 +371,11 @@ function renderPositionViews(target, views, depth, bind = noBind) {
 }
 
 function positionCards(view, depth, bind = noBind) {
-  const cards = [];
+  // Build tab content sections
+  const sections = {};
 
+  // Summary section (always shown)
+  sections.summary = [];
   const hero = card(null, "hero");
   hero.append(el("p", "verdict", view.summary));
   const meta = el(
@@ -391,9 +394,11 @@ function positionCards(view, depth, bind = noBind) {
     );
   }
   if (view.note) hero.append(el("p", "note", view.note));
-  cards.push(hero);
+  sections.summary.push(hero);
 
-  if (view.candidates.length) {
+  // Good moves section
+  if (view.candidates && view.candidates.length) {
+    sections.moves = [];
     const box = card(`Best moves for ${view.perspective}`);
     const lines = el("div", "lines");
     view.candidates.forEach((c) => {
@@ -405,23 +410,115 @@ function positionCards(view, depth, bind = noBind) {
       lines.append(line);
     });
     box.append(lines);
-    cards.push(box);
+    sections.moves.push(box);
   }
 
-  if (view.purposes.length) {
-    const best = view.candidates[0] ? view.candidates[0].san : "The best move";
+  // Plans section
+  if (view.purposes && view.purposes.length) {
+    sections.plans = [];
+    const best = view.candidates && view.candidates[0] ? view.candidates[0].san : "The best move";
     const box = card(`${best} is good because it`);
     box.append(factList(view.purposes, null, bind));
-    cards.push(box);
+    sections.plans.push(box);
   }
 
   // The two threats are labelled by when they apply, so they are relabelled
   // here rather than shown as the server phrased them.
-  const threats = [];
-  if (view.threatBefore) {
-    threats.push({ text: `Before: ${view.threatBefore.text}`, cue: view.threatBefore.cue });
+  if (view.threats && view.threats.length) {
+    sections.threats = [];
+    view.threats.forEach((t) => {
+      const box = card("Threats");
+      box.append(el("p", "note", t.text));
+      sections.threats.push(box);
+    });
   }
-  if (view.threatAfterBest) {
+
+  // Piece roles section
+  if (view.roles && view.roles.length) {
+    sections.roles = [];
+    const box = card(`Piece roles for ${view.perspective}`);
+    box.append(factList(view.roles, null, bind));
+    sections.roles.push(box);
+  }
+
+  // Concepts section
+  if (view.concepts && view.concepts.length) {
+    sections.concepts = [];
+    const box = card("Concepts");
+    const kv = el("div", "kv");
+    view.concepts.forEach((c) => {
+      const row = el("div", "kv-row");
+      row.append(el("span", "k", c.name));
+      const value = el("span", "v", c.detail);
+      if (c.favours) {
+        value.append(el("span", `tag ${c.favours.toLowerCase()}`, c.favours));
+      }
+      row.append(value);
+      bind(row, c.cue);
+      kv.append(row);
+    });
+    box.append(kv);
+    sections.concepts.push(box);
+  }
+
+  // Build tab navigation
+  const tabOrder = ["summary", "moves", "plans", "threats", "roles", "concepts"];
+  const tabNav = el("div", "tab-nav");
+
+  tabOrder.forEach((tabId, index) => {
+    // Only create tabs for sections that have content
+    if (!sections[tabId] || sections[tabId].length === 0) return;
+
+    const button = el("button", "tab-button", tabId.charAt(0).toUpperCase() + tabId.slice(1));
+    button.dataset.tab = tabId;
+    button.setAttribute("aria-selected", index === 0 ? "true" : "false");
+    button.setAttribute("aria-controls", `panel-${tabId}`);
+    tabNav.appendChild(button);
+  });
+
+  // Create content containers
+  const container = el("div", "tab-container");
+  container.appendChild(tabNav);
+
+  tabOrder.forEach((tabId) => {
+    if (!sections[tabId] || sections[tabId].length === 0) return;
+
+    const panel = el("div", "tab-panel");
+    panel.id = `panel-${tabId}`;
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", `tab-${tabId}`);
+
+    if (tabId === "summary") {
+      panel.classList.add("active");
+    }
+
+    sections[tabId].forEach((section) => panel.appendChild(section));
+    container.appendChild(panel);
+  });
+
+  // Tab switching
+  container.querySelectorAll(".tab-nav button").forEach((button) => {
+    button.addEventListener("click", () => {
+      container.querySelectorAll(".tab-panel").forEach((panel) => {
+        panel.classList.remove("active");
+        panel.hidden = true;
+      });
+      const panel = document.getElementById(`panel-${button.dataset.tab}`);
+      if (panel) {
+        panel.classList.add("active");
+        panel.hidden = false;
+      }
+
+      container.querySelectorAll(".tab-button").forEach((btn) => {
+        btn.classList.remove("active");
+        btn.setAttribute("aria-selected", "false");
+      });
+      button.classList.add("active");
+      button.setAttribute("aria-selected", "true");
+    });
+  });
+
+  return container;
     const best = view.candidates[0] ? view.candidates[0].san : "the best move";
     threats.push({
       text: `After ${best}: ${view.threatAfterBest.text}`,
