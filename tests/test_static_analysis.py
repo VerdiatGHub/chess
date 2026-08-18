@@ -231,6 +231,10 @@ def test_capture_in_the_line_is_named_as_a_purpose():
     assert any("captures the white bishop" in p.describe() for p in plies[1].purposes)
     assert any("captures the black bishop" in p.describe() for p in plies[2].purposes)
     assert any("counters the threat" in p.describe() for p in plies[2].purposes)
+    recapture = next(p for p in plies[2].purposes if "captures the black bishop" in p.describe())
+    assert "takes the black bishop" in recapture.detail
+    counter = next(p for p in plies[2].purposes if "counters the threat" in p.describe())
+    assert "no longer legal" in counter.detail
 
 
 def test_purpose_reports_castling_and_promotion():
@@ -344,3 +348,45 @@ def test_concepts_name_the_side_a_feature_favours():
     concepts = {c.name: c for c in describe_concepts(board)}
     assert concepts["Material"].favours == chess.WHITE
     assert "3.00 ahead" in concepts["Material"].detail
+
+
+def test_purpose_and_concept_payloads_include_expandable_detail():
+    from decodex.payload import position_payload
+    from decodex.facts import PositionFacts
+    from decodex.plans import Purpose
+    from decodex.concepts import Concept
+    from decodex.cues import EMPTY
+
+    facts = PositionFacts(
+        fen=DRAGON,
+        perspective=chess.WHITE,
+        turn=chess.WHITE,
+        free_tempo_view=False,
+        eval_cp=259,
+        purposes=[
+            Purpose(
+                kind="captures",
+                text="captures the black bishop",
+                ply=0,
+                cue=EMPTY,
+                detail="axb3 takes the black bishop on b3.",
+                line="16. axb3 O-O",
+            )
+        ],
+        concepts=[
+            Concept(
+                name="Space",
+                detail="pawn-controlled squares in enemy territory 4 vs 2",
+                favours=chess.WHITE,
+                white_squares=(chess.G5,),
+                black_squares=(chess.E4,),
+            )
+        ],
+    )
+    payload = position_payload(facts)
+    purpose = payload["purposes"][0]
+    assert purpose["detail"].startswith("axb3 takes")
+    assert purpose["line"] == "16. axb3 O-O"
+    concept = payload["concepts"][0]
+    assert "White squares counted: g5" in concept["explanation"]
+    assert "This favours White" in concept["explanation"]

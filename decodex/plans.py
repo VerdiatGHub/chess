@@ -28,6 +28,8 @@ class Purpose:
     text: str
     ply: int
     cue: Cue = field(default=EMPTY)
+    detail: str = ""
+    line: str = ""
 
     def describe(self) -> str:
         return self.text
@@ -45,6 +47,12 @@ def _pv_boards(
     return steps
 
 
+def _line_san(board: chess.Board, pv: Sequence[chess.Move], *, limit: int = 10) -> str:
+    if not pv:
+        return ""
+    return board.variation_san(list(pv[:limit]))
+
+
 def _follow_up(
     board: chess.Board, pv: Sequence[chess.Move]
 ) -> Optional[Purpose]:
@@ -58,10 +66,17 @@ def _follow_up(
             continue
         if move.from_square != square:
             continue
+        later = position.san(move)
+        first_san = board.san(first)
         return Purpose(
             kind="follow_up",
-            text=f"intends to play {position.san(move)}",
+            text=f"intends to play {later}",
             ply=index,
+            detail=(
+                f"In the engine line the same piece that plays {first_san} "
+                f"continues with {later}."
+            ),
+            line=_line_san(board, pv),
             # Both hops of the plan: this move, then the same piece going on.
             cue=cue(
                 actors=[first.from_square],
@@ -111,11 +126,17 @@ def _prepared_squares(
                 f"supports bringing the {chess.piece_name(piece.piece_type)} "
                 f"to {target}"
             )
+        later = position.san(move)
         purposes.append(
             Purpose(
                 kind="prepares",
                 text=text,
                 ply=index,
+                detail=(
+                    f"{board.san(first)} newly defends {target}, and the engine "
+                    f"line later plays {later} onto that square."
+                ),
+                line=_line_san(board, pv),
                 cue=cue(
                     actors=[first.from_square],
                     zone=[first.to_square],
@@ -152,13 +173,18 @@ def _rescues(board: chess.Board, move: chess.Move) -> Optional[Purpose]:
         piece.color, move.to_square
     ):
         return None
+    origin = chess.square_name(move.from_square)
     return Purpose(
         kind="rescues",
         text=(
             f"moves the {chess.piece_name(piece.piece_type)} off "
-            f"{chess.square_name(move.from_square)}, where it was attacked"
+            f"{origin}, where it was attacked"
         ),
         ply=0,
+        detail=(
+            f"The {chess.piece_name(piece.piece_type)} on {origin} was attacked "
+            f"by cheaper material and was not adequately defended."
+        ),
         cue=cue(
             actors=[move.from_square],
             zone=[move.to_square],
@@ -197,6 +223,10 @@ def _defends(board: chess.Board, move: chess.Move) -> Optional[Purpose]:
         kind="defends",
         text=f"defends {join_words(rescued)}",
         ply=0,
+        detail=(
+            f"{board.san(move)} newly protects {join_words(rescued)}, "
+            f"which {('was' if len(rescued) == 1 else 'were')} attacked and loose."
+        ),
         cue=cue(
             actors=[move.from_square],
             zone=[move.to_square],
@@ -215,6 +245,7 @@ def _castling(board: chess.Board, move: chess.Move) -> Optional[Purpose]:
         kind="castling",
         text=f"castles {side}, tucking the king away",
         ply=0,
+        detail=f"{board.san(move)} is {side} castling.",
         cue=move_cue(move),
     )
 
@@ -226,6 +257,7 @@ def _promotion(board: chess.Board, move: chess.Move) -> Optional[Purpose]:
         kind="promotion",
         text=f"promotes to a {chess.piece_name(move.promotion)}",
         ply=0,
+        detail=f"{board.san(move)} promotes on {chess.square_name(move.to_square)}.",
         cue=move_cue(move),
     )
 
@@ -246,6 +278,10 @@ def _captures(board: chess.Board, move: chess.Move) -> Optional[Purpose]:
         kind="captures",
         text=f"captures the {color} {victim}",
         ply=0,
+        detail=(
+            f"{board.san(move)} takes the {color} {victim} on "
+            f"{chess.square_name(move.to_square)}."
+        ),
         cue=move_cue(move, targets=[move.to_square]),
     )
 
@@ -268,6 +304,9 @@ def _returns_home(board: chess.Board, pv: Sequence[chess.Move]) -> Optional[Purp
         kind="threatens_return",
         text=f"threatens to play {san}",
         ply=0,
+        detail=(
+            f"After {board.san(first)}, the same piece can legally return with {san}."
+        ),
         cue=cue(
             actors=[first.to_square],
             zone=[first.from_square],
@@ -300,6 +339,11 @@ def _vacates(board: chess.Board, pv: Sequence[chess.Move]) -> Optional[Purpose]:
         kind="vacates",
         text=f"vacates {name} and enables {enabled}",
         ply=0,
+        detail=(
+            f"{board.san(first)} leaves {name}, and the engine line later uses "
+            f"that square with {enabled}."
+        ),
+        line=_line_san(board, pv),
         cue=cue(
             actors=[first.from_square],
             zone=[first.to_square, vacated],
@@ -327,7 +371,16 @@ def _later_intentions(board: chess.Board, pv: Sequence[chess.Move]) -> Optional[
         text = f"intends to play {sans[0]}"
     else:
         text = f"intends to play {sans[0]} or {sans[1]}"
-    return Purpose(kind="intends_later", text=text, ply=0, cue=move_cue(pv[0]))
+    return Purpose(
+        kind="intends_later",
+        text=text,
+        ply=0,
+        detail=(
+            f"Later in the engine line the same side plays {join_words(sans)}."
+        ),
+        line=_line_san(board, pv),
+        cue=move_cue(pv[0]),
+    )
 
 
 def _counters(
@@ -359,6 +412,10 @@ def _counters(
         kind="counters",
         text=f"counters the threat of {named}",
         ply=0,
+        detail=(
+            f"Without {board.san(move)}, {named} is legal from the opponent's "
+            f"last piece. After {board.san(move)}, that follow-up is no longer legal."
+        ),
         cue=cue(
             actors=[move.from_square],
             targets=[previous.to_square],
@@ -438,11 +495,15 @@ def explain_weaknesses(
             continue
         if reply not in after.legal_moves:
             continue
+        reply_san = position.san(reply)
         found.append(
             Purpose(
                 kind="enables_opponent",
-                text=f"enables {position.san(reply)}",
+                text=f"enables {reply_san}",
                 ply=index,
+                detail=(
+                    f"{board.san(move)} newly makes {reply_san} legal for the opponent."
+                ),
                 cue=cue(
                     actors=[move.from_square],
                     zone=[move.to_square, reply.to_square],

@@ -74,12 +74,43 @@ function card(title, extraClass) {
 /* A list of facts. Items are `{text, cue}` from the server, or bare strings for
  * lines the UI composes itself; `bind` attaches the geometry where there is any.
  */
+function factDetail(item) {
+  if (typeof item === "string") return "";
+  const parts = [];
+  if (item.detail) parts.push(item.detail);
+  if (item.line) parts.push(item.line);
+  if (item.explanation) parts.push(item.explanation);
+  return parts.join(" ");
+}
+
 function factList(items, extraClass, bind = noBind, fen) {
   const list = el("ul", extraClass ? `facts ${extraClass}` : "facts");
   items.forEach((item) => {
     const text = typeof item === "string" ? item : item.text;
-    const node = el("li", null, text);
-    if (typeof item !== "string") bind(node, item.cue, fen);
+    const node = el("li", "fact");
+    node.append(el("span", "fact-text", text));
+    const extra = factDetail(item);
+    if (extra) {
+      const body = el("p", "fact-extra", extra);
+      body.hidden = true;
+      node.append(body);
+      node.classList.add("expandable");
+      node.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const open = body.hidden;
+        list.querySelectorAll(".fact-extra").forEach((block) => {
+          block.hidden = true;
+        });
+        list.querySelectorAll(".fact").forEach((row) => {
+          row.classList.remove("open");
+        });
+        if (open) {
+          body.hidden = false;
+          node.classList.add("open");
+        }
+      });
+    }
+    if (typeof item !== "string") bind(node, item.cue, fen, text);
     list.append(node);
   });
   return list;
@@ -527,13 +558,13 @@ function renderBecause(target, ply, bind = noBind) {
   if (ply.purposes && ply.purposes.length) {
     const reasons = el("div", "because");
     reasons.append(el("p", "because-title", becausePhrase(ply)));
-    reasons.append(factList(ply.purposes, "because-list", bind, ply.fenBefore));
+    reasons.append(factList(ply.purposes, "because-list", bind));
     target.append(reasons);
   }
   if (ply.weaknesses && ply.weaknesses.length) {
     const weak = el("div", "because because-weak");
     weak.append(el("p", "because-title", `${ply.san} weaknesses: it`));
-    weak.append(factList(ply.weaknesses, "because-list weak-list", bind, ply.fenBefore));
+    weak.append(factList(ply.weaknesses, "because-list weak-list", bind));
     target.append(weak);
   }
 }
@@ -720,7 +751,27 @@ function positionCards(view, depth, bind = noBind, onSelectPly) {
         value.append(el("span", `tag ${c.favours.toLowerCase()}`, c.favours));
       }
       row.append(value);
-      bind(row, c.cue);
+      if (c.explanation) {
+        const extra = el("p", "fact-extra", c.explanation);
+        extra.hidden = true;
+        row.append(extra);
+        row.classList.add("expandable");
+        row.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const open = extra.hidden;
+          kv.querySelectorAll(".fact-extra").forEach((block) => {
+            block.hidden = true;
+          });
+          kv.querySelectorAll(".kv-row").forEach((item) => {
+            item.classList.remove("open");
+          });
+          if (open) {
+            extra.hidden = false;
+            row.classList.add("open");
+          }
+        });
+      }
+      bind(row, c.cue, undefined, c.text || c.name);
       kv.append(row);
     });
     box.append(kv);
@@ -980,7 +1031,9 @@ function showLinePly(board, ply, { turn } = {}) {
   // Draw the position after the clicked ply, with the move's arrow measured
   // on the position it was played from.
   board.setPosition(after);
-  board.showCue(ply.cue, before);
+  // Keep the after-position on the board. Arrow geometry uses square names,
+  // so it still draws correctly without snapping back to fenBefore.
+  board.showCue(ply.cue);
   if (turn) {
     const side = (after.split(" ")[1] === "b") ? "Black" : "White";
     turn.textContent = `${side} to move · ${plyCaption(ply)}`;

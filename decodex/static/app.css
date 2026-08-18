@@ -901,6 +901,35 @@ ul.facts.because-list li::before {
   top: 0.55em;
 }
 
+.fact-text {
+  display: block;
+}
+
+.fact-extra {
+  margin: 8px 0 0;
+  color: var(--paper-dim);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.fact.expandable,
+.kv-row.expandable {
+  cursor: pointer;
+}
+
+.fact.open,
+.kv-row.open {
+  background: var(--hover);
+}
+
+.kv-row {
+  position: relative;
+}
+
+.kv-row .fact-extra {
+  grid-column: 1 / -1;
+}
+
 .verdict {
   margin: 0;
   font-size: clamp(1.3rem, 3vw, 1.85rem);

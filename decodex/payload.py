@@ -48,11 +48,27 @@ def _threat(threat) -> Optional[Dict[str, Any]]:
     }
 
 
+def _square_names(squares) -> str:
+    return ", ".join(chess.square_name(square) for square in squares)
+
+
+def _concept_explanation(concept: Concept) -> str:
+    parts = [f"{concept.name}: {concept.detail}."]
+    if concept.white_squares:
+        parts.append(f"White squares counted: {_square_names(concept.white_squares)}.")
+    if concept.black_squares:
+        parts.append(f"Black squares counted: {_square_names(concept.black_squares)}.")
+    if concept.favours is not None:
+        parts.append(f"This favours {side_word(concept.favours)}.")
+    return " ".join(parts)
+
+
 def _concepts(concepts: List[Concept]) -> List[Dict[str, Any]]:
     return [
         {
             "name": concept.name,
             "detail": concept.detail,
+            "explanation": _concept_explanation(concept),
             "favours": side_word(concept.favours) if concept.favours is not None else None,
             "text": concept.describe(),
             "cue": _cue(concept.cue()),
@@ -89,11 +105,21 @@ def position_payload(facts: PositionFacts) -> Dict[str, Any]:
                         "fenAfter": ply.fen_after,
                         "cue": _cue(ply.cue),
                         "purposes": [
-                            {"text": purpose.describe(), "cue": _cue(purpose.cue)}
+                            {
+                                "text": purpose.describe(),
+                                "detail": purpose.detail,
+                                "line": purpose.line,
+                                "cue": _cue(purpose.cue),
+                            }
                             for purpose in ply.purposes
                         ],
                         "weaknesses": [
-                            {"text": weakness.describe(), "cue": _cue(weakness.cue)}
+                            {
+                                "text": weakness.describe(),
+                                "detail": weakness.detail,
+                                "line": weakness.line,
+                                "cue": _cue(weakness.cue),
+                            }
                             for weakness in ply.weaknesses
                         ],
                     }
@@ -104,7 +130,12 @@ def position_payload(facts: PositionFacts) -> Dict[str, Any]:
             for candidate in facts.candidates
         ],
         "purposes": [
-            {"text": purpose.describe(), "cue": _cue(purpose.cue)}
+            {
+                "text": purpose.describe(),
+                "detail": purpose.detail,
+                "line": purpose.line,
+                "cue": _cue(purpose.cue),
+            }
             for purpose in facts.purposes
         ],
         "threatBefore": _threat(facts.threat_before),
