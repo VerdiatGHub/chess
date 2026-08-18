@@ -458,8 +458,15 @@ body::before {
   overflow: visible;
 }
 
+/* Arrow sizes - tuned small to match decodechess.com style */
+:root {
+  --arrow-stroke: 0.03;
+  --arrow-head-size: 0.02;
+  --arrow-head-width: 0.03;
+}
+
 .arrow {
-  stroke-width: 0.04;
+  stroke-width: var(--arrow-stroke);
   stroke-linecap: round;
   fill: none;
 }
