@@ -460,9 +460,9 @@ body::before {
 
 /* Arrow sizes - tuned small to match decodechess.com style */
 :root {
-  --arrow-stroke: 0.03;
-  --arrow-head-size: 0.02;
-  --arrow-head-width: 0.03;
+  --arrow-stroke: 0.025;
+  --arrow-head-size: 0.015;
+  --arrow-head-width: 0.02;
 }
 
 .arrow {
