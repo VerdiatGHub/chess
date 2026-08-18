@@ -367,15 +367,145 @@ const noBind = (node) => node;
 
 function renderPositionViews(target, views, depth, bind = noBind) {
   target.replaceChildren();
-  views.forEach((view) => target.append(...positionCards(view, depth, bind)));
+  const fragment = document.createDocumentFragment();
+
+  views.forEach((view) => {
+    const cards = positionCards(view, depth, bind);
+    const tabGroup = createReportTabs(cards);
+    fragment.appendChild(tabGroup);
+  });
+
+  target.appendChild(fragment);
+}
+
+function createReportTabs(cards) {
+  // Categorize cards into tabs based on their content
+  const tabs = {
+    "Summary": [],
+    "Piece Roles": [],
+    "Threats": [],
+    "Tactics": [],
+    "Plans": [],
+    "Concepts": [],
+    "Other": []
+  };
+
+  cards.forEach((card) => {
+    const titleEl = card.querySelector("h3");
+    let category = "Other";
+
+    if (!titleEl) {
+      // No title = summary/hero card
+      category = "Summary";
+    } else {
+      const title = titleEl.textContent || "";
+      if (title.includes("Best moves")) {
+        category = "Plans";
+      } else if (title.includes("is good because")) {
+        category = "Plans";
+      } else if (title.includes("Threats") || title.includes("defuses") || title.includes("concedes") ||
+                 title.includes("Before:") || title.includes("After")) {
+        category = "Threats";
+      } else if (title.includes("Tactics")) {
+        category = "Tactics";
+      } else if (title.includes("Loose material")) {
+        category = "Threats";
+      } else if (title.includes("Pay attention")) {
+        category = "Other";
+      } else if (title.includes("Piece roles") || title.includes("role")) {
+        category = "Piece Roles";
+      } else if (title.includes("Concepts") || title.includes("Space") || title.includes("Material") ||
+                 title.includes("King safety") || title.includes("Pawn") || title.includes("Development")) {
+        category = "Concepts";
+      } else if (title.includes("Piece importance")) {
+        category = "Other";
+      }
+    }
+
+    tabs[category].push(card);
+  });
+
+  // Build tab container
+  const tabContainer = el("div", "report-tabs");
+  const tabNav = el("div", "tab-nav");
+  const tabWrapper = el("div", "tab-panel-wrapper");
+
+  // Create tabs for categories that have content
+  let first = true;
+  let hasMultipleTabs = 0;
+
+  Object.entries(tabs).forEach(([tabName, tabCards]) => {
+    if (tabCards.length === 0) return;
+    hasMultipleTabs++;
+
+    const button = el("button", "tab-button", tabName);
+    button.dataset.tab = tabName;
+    button.id = `tab-${tabName.replace(/\s+/g, "-")}`;
+    if (first) {
+      button.classList.add("active");
+      button.setAttribute("aria-selected", "true");
+    } else {
+      button.setAttribute("aria-selected", "false");
+    }
+    button.setAttribute("aria-controls", `panel-${tabName.replace(/\s+/g, "-")}`);
+    tabNav.appendChild(button);
+
+    const panel = el("div", "tab-panel");
+    panel.id = `panel-${tabName.replace(/\s+/g, "-")}`;
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", button.id);
+    if (first) {
+      panel.classList.add("active");
+    }
+    panel.append(...tabCards);
+    tabWrapper.appendChild(panel);
+
+    first = false;
+  });
+
+  // If only one tab with content, don't show tabs
+  if (hasMultipleTabs <= 1) {
+    const singlePanel = tabWrapper.querySelector(".tab-panel");
+    if (singlePanel) {
+      singlePanel.classList.remove("tab-panel");
+      singlePanel.classList.add("cards");
+      singlePanel.removeAttribute("hidden");
+      singlePanel.style.display = "block";
+      return singlePanel;
+    }
+    return tabWrapper;
+  }
+
+  // Tab switching
+  tabNav.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", () => {
+      tabNav.querySelectorAll("button").forEach((btn) => {
+        btn.classList.remove("active");
+        btn.setAttribute("aria-selected", "false");
+      });
+      button.classList.add("active");
+      button.setAttribute("aria-selected", "true");
+
+      tabWrapper.querySelectorAll(".tab-panel").forEach((panel) => {
+        panel.classList.remove("active");
+      });
+      const activePanel = tabWrapper.querySelector(`#panel-${button.dataset.tab.replace(/\s+/g, "-")}`);
+      if (activePanel) {
+        activePanel.classList.add("active");
+      }
+    });
+  });
+
+  tabContainer.appendChild(tabNav);
+  tabContainer.appendChild(tabWrapper);
+
+  return tabContainer;
 }
 
 function positionCards(view, depth, bind = noBind) {
-  // Build tab content sections
-  const sections = {};
+  const cards = [];
 
-  // Summary section (always shown)
-  sections.summary = [];
+  // Hero/summary card - always shown
   const hero = card(null, "hero");
   hero.append(el("p", "verdict", view.summary));
   const meta = el(
@@ -394,11 +524,10 @@ function positionCards(view, depth, bind = noBind) {
     );
   }
   if (view.note) hero.append(el("p", "note", view.note));
-  sections.summary.push(hero);
+  cards.push(hero);
 
-  // Good moves section
-  if (view.candidates && view.candidates.length) {
-    sections.moves = [];
+  // Best moves
+  if (view.candidates.length) {
     const box = card(`Best moves for ${view.perspective}`);
     const lines = el("div", "lines");
     view.candidates.forEach((c) => {
@@ -410,115 +539,23 @@ function positionCards(view, depth, bind = noBind) {
       lines.append(line);
     });
     box.append(lines);
-    sections.moves.push(box);
+    cards.push(box);
   }
 
-  // Plans section
-  if (view.purposes && view.purposes.length) {
-    sections.plans = [];
-    const best = view.candidates && view.candidates[0] ? view.candidates[0].san : "The best move";
+  // Plans (from purposes)
+  if (view.purposes.length) {
+    const best = view.candidates[0] ? view.candidates[0].san : "The best move";
     const box = card(`${best} is good because it`);
     box.append(factList(view.purposes, null, bind));
-    sections.plans.push(box);
+    cards.push(box);
   }
 
-  // The two threats are labelled by when they apply, so they are relabelled
-  // here rather than shown as the server phrased them.
-  if (view.threats && view.threats.length) {
-    sections.threats = [];
-    view.threats.forEach((t) => {
-      const box = card("Threats");
-      box.append(el("p", "note", t.text));
-      sections.threats.push(box);
-    });
+  // Threats and related
+  const threats = [];
+  if (view.threatBefore) {
+    threats.push({ text: `Before: ${view.threatBefore.text}`, cue: view.threatBefore.cue });
   }
-
-  // Piece roles section
-  if (view.roles && view.roles.length) {
-    sections.roles = [];
-    const box = card(`Piece roles for ${view.perspective}`);
-    box.append(factList(view.roles, null, bind));
-    sections.roles.push(box);
-  }
-
-  // Concepts section
-  if (view.concepts && view.concepts.length) {
-    sections.concepts = [];
-    const box = card("Concepts");
-    const kv = el("div", "kv");
-    view.concepts.forEach((c) => {
-      const row = el("div", "kv-row");
-      row.append(el("span", "k", c.name));
-      const value = el("span", "v", c.detail);
-      if (c.favours) {
-        value.append(el("span", `tag ${c.favours.toLowerCase()}`, c.favours));
-      }
-      row.append(value);
-      bind(row, c.cue);
-      kv.append(row);
-    });
-    box.append(kv);
-    sections.concepts.push(box);
-  }
-
-  // Build tab navigation
-  const tabOrder = ["summary", "moves", "plans", "threats", "roles", "concepts"];
-  const tabNav = el("div", "tab-nav");
-
-  tabOrder.forEach((tabId, index) => {
-    // Only create tabs for sections that have content
-    if (!sections[tabId] || sections[tabId].length === 0) return;
-
-    const button = el("button", "tab-button", tabId.charAt(0).toUpperCase() + tabId.slice(1));
-    button.dataset.tab = tabId;
-    button.setAttribute("aria-selected", index === 0 ? "true" : "false");
-    button.setAttribute("aria-controls", `panel-${tabId}`);
-    tabNav.appendChild(button);
-  });
-
-  // Create content containers
-  const container = el("div", "tab-container");
-  container.appendChild(tabNav);
-
-  tabOrder.forEach((tabId) => {
-    if (!sections[tabId] || sections[tabId].length === 0) return;
-
-    const panel = el("div", "tab-panel");
-    panel.id = `panel-${tabId}`;
-    panel.setAttribute("role", "tabpanel");
-    panel.setAttribute("aria-labelledby", `tab-${tabId}`);
-
-    if (tabId === "summary") {
-      panel.classList.add("active");
-    }
-
-    sections[tabId].forEach((section) => panel.appendChild(section));
-    container.appendChild(panel);
-  });
-
-  // Tab switching
-  container.querySelectorAll(".tab-nav button").forEach((button) => {
-    button.addEventListener("click", () => {
-      container.querySelectorAll(".tab-panel").forEach((panel) => {
-        panel.classList.remove("active");
-        panel.hidden = true;
-      });
-      const panel = document.getElementById(`panel-${button.dataset.tab}`);
-      if (panel) {
-        panel.classList.add("active");
-        panel.hidden = false;
-      }
-
-      container.querySelectorAll(".tab-button").forEach((btn) => {
-        btn.classList.remove("active");
-        btn.setAttribute("aria-selected", "false");
-      });
-      button.classList.add("active");
-      button.setAttribute("aria-selected", "true");
-    });
-  });
-
-  return container;
+  if (view.threatAfterBest) {
     const best = view.candidates[0] ? view.candidates[0].san : "the best move";
     threats.push({
       text: `After ${best}: ${view.threatAfterBest.text}`,
@@ -539,12 +576,14 @@ function positionCards(view, depth, bind = noBind) {
     cards.push(box);
   }
 
+  // Tactics
   if (view.tactics.length) {
     const box = card("Tactics on the board");
     box.append(factList(view.tactics, null, bind));
     cards.push(box);
   }
 
+  // Hanging material
   if (view.hanging.length) {
     const box = card("Loose material");
     box.append(
@@ -560,18 +599,21 @@ function positionCards(view, depth, bind = noBind) {
     cards.push(box);
   }
 
+  // Observations
   if (view.observations.length) {
     const box = card("Pay attention to");
     box.append(factList(view.observations, null, bind));
     cards.push(box);
   }
 
+  // Piece roles
   if (view.roles.length) {
     const box = card(`Piece roles for ${view.perspective}`);
     box.append(factList(view.roles, null, bind));
     cards.push(box);
   }
 
+  // Concepts
   if (view.concepts.length) {
     const box = card("Concepts");
     const kv = el("div", "kv");
@@ -590,6 +632,7 @@ function positionCards(view, depth, bind = noBind) {
     cards.push(box);
   }
 
+  // NNUE contributions
   if (view.contributions.length) {
     const box = card(`Piece importance for ${view.perspective}`);
     const bars = el("div", "bars");
