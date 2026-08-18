@@ -110,9 +110,9 @@ function fillRange(select, from, to, selected) {
 /* ---------------- board ---------------- */
 
 // Arrowheads are drawn as polygons rather than SVG markers, because a marker
-// scales with stroke width and the tone colours use different widths.
-const ARROW_HEAD = 0.025;
-const ARROW_HALF_WIDTH = 0.04;
+// scales with stroke width. Units are board squares (overlay viewBox is 8x8).
+const ARROW_HEAD = 0.28;
+const ARROW_HALF_WIDTH = 0.11;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 

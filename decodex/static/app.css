@@ -460,9 +460,9 @@ body::before {
 
 /* Arrow sizes - tuned small to match decodechess.com style */
 :root {
-  --arrow-stroke: 0.04;
-  --arrow-head-size: 0.025;
-  --arrow-head-width: 0.04;
+  --arrow-stroke: 0.08;
+  --arrow-head-size: 0.28;
+  --arrow-head-width: 0.11;
 }
 
 .arrow {
@@ -472,16 +472,23 @@ body::before {
 }
 
 .arrow-head {
+  /* Heads are filled polygons. A stroke here is deadly: the overlay is an 8x8
+     user space, so the SVG default width of 1 is an entire square. */
   stroke: none;
 }
 
 /* Tones match the legend: the move to play, the plan behind it, what attacks
    what, what defends what, and what the opponent is threatening. */
-.arrow.move, .arrow-head.move { stroke: var(--cue-move); fill: var(--cue-move); }
-.arrow.plan, .arrow-head.plan { stroke: var(--cue-plan); fill: var(--cue-plan); }
-.arrow.attack, .arrow-head.attack { stroke: var(--cue-attack); fill: var(--cue-attack); }
-.arrow.support, .arrow-head.support { stroke: var(--cue-support); fill: var(--cue-support); }
-.arrow.threat, .arrow-head.threat { stroke: var(--cue-threat); fill: var(--cue-threat); }
+.arrow.move { stroke: var(--cue-move); }
+.arrow-head.move { fill: var(--cue-move); }
+.arrow.plan { stroke: var(--cue-plan); }
+.arrow-head.plan { fill: var(--cue-plan); }
+.arrow.attack { stroke: var(--cue-attack); }
+.arrow-head.attack { fill: var(--cue-attack); }
+.arrow.support { stroke: var(--cue-support); }
+.arrow-head.support { fill: var(--cue-support); }
+.arrow.threat { stroke: var(--cue-threat); }
+.arrow-head.threat { fill: var(--cue-threat); }
 
 .arrow.plan {
   stroke-dasharray: 0.26 0.2;
