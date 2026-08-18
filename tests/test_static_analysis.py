@@ -214,8 +214,23 @@ def test_line_plies_keep_each_move_and_its_squares():
     assert [ply.san for ply in plies] == ["h4", "Rg8", "h5"]
     assert plies[0].move_number == 15
     assert plies[0].cue.arrows[0].tone == "move"
-    assert plies[1].cue.arrows[0].tone == "plan"
+    assert plies[1].fen_before != plies[0].fen_before
+    assert plies[0].fen_after == plies[1].fen_before
+    assert any("intends to play h5" in p.describe() for p in plies[0].purposes)
     assert plies[2].uci == "h4h5"
+
+def test_capture_in_the_line_is_named_as_a_purpose():
+    board = chess.Board(DRAGON)
+    pv = []
+    walker = board.copy()
+    for san in ("h4", "Bxb3", "axb3"):
+        move = walker.parse_san(san)
+        pv.append(move)
+        walker.push(move)
+    plies = line_plies(board, pv)
+    assert any("captures the white bishop" in p.describe() for p in plies[1].purposes)
+    assert any("captures the black bishop" in p.describe() for p in plies[2].purposes)
+    assert any("counters the threat" in p.describe() for p in plies[2].purposes)
 
 
 def test_purpose_reports_castling_and_promotion():

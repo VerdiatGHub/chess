@@ -365,12 +365,12 @@ const noBind = (node) => node;
 
 /* ---------------- position report ---------------- */
 
-function renderPositionViews(target, views, depth, bind = noBind) {
+function renderPositionViews(target, views, depth, bind = noBind, onSelectPly) {
   target.replaceChildren();
   const fragment = document.createDocumentFragment();
 
   views.forEach((view) => {
-    const cards = positionCards(view, depth, bind);
+    const cards = positionCards(view, depth, bind, onSelectPly);
     const tabGroup = createReportTabs(cards);
     fragment.appendChild(tabGroup);
   });
@@ -511,7 +511,34 @@ function plyLabel(ply, previous) {
   return "";
 }
 
-function pvLine(candidate, bind = noBind) {
+function plyCaption(ply) {
+  return `${ply.moveNumber}${ply.color === "White" ? "." : "..."} ${ply.san}`;
+}
+
+function becausePhrase(ply) {
+  return ply.color === "White"
+    ? `${ply.san} is beneficial because it`
+    : `${ply.san} is good because it`;
+}
+
+function renderBecause(target, ply, bind = noBind) {
+  target.replaceChildren();
+  if (!ply) return;
+  if (ply.purposes && ply.purposes.length) {
+    const reasons = el("div", "because");
+    reasons.append(el("p", "because-title", becausePhrase(ply)));
+    reasons.append(factList(ply.purposes, "because-list", bind, ply.fenBefore));
+    target.append(reasons);
+  }
+  if (ply.weaknesses && ply.weaknesses.length) {
+    const weak = el("div", "because because-weak");
+    weak.append(el("p", "because-title", `${ply.san} weaknesses: it`));
+    weak.append(factList(ply.weaknesses, "because-list weak-list", bind, ply.fenBefore));
+    target.append(weak);
+  }
+}
+
+function pvLine(candidate, bind = noBind, onSelect) {
   const row = el("div", "pv-line");
   const plies = candidate.linePlies && candidate.linePlies.length
     ? candidate.linePlies
@@ -520,37 +547,60 @@ function pvLine(candidate, bind = noBind) {
     row.append(el("span", "pv", candidate.line));
     return row;
   }
+  const buttons = [];
+  const mark = (selected) => {
+    buttons.forEach((button) => {
+      const active = button === selected;
+      button.classList.toggle("current", active);
+      button.setAttribute("aria-current", String(active));
+    });
+  };
   plies.forEach((ply, index) => {
     const prefix = plyLabel(ply, plies[index - 1]);
     if (prefix) row.append(el("span", "pv-num", prefix));
     const move = el("button", "pv-move", ply.san);
     move.type = "button";
-    bind(move, ply.cue, undefined, `${ply.moveNumber}${ply.color === "White" ? "." : "..."} ${ply.san}`);
+    bind(move, ply.cue, ply.fenBefore, plyCaption(ply));
+    move.addEventListener("click", (event) => {
+      event.stopPropagation();
+      mark(move);
+      if (onSelect) onSelect(ply);
+    });
+    buttons.push(move);
     row.append(move);
   });
+  if (onSelect && buttons[0]) mark(buttons[0]);
   return row;
 }
 
-function bestLineCard(view, bind = noBind) {
+function bestLineCard(view, bind = noBind, onSelectPly) {
   const best = view.candidates[0];
   const box = card("Explaining the best line of Stockfish NNUE", "nnue-line");
   const intro = el("div", "best-line");
   const bullet = el("div", "best-line-row");
   bullet.append(el("span", "best-dot", "•"));
-  bullet.append(pvLine(best, bind));
+  const becauseHost = el("div", "because-host");
+  const start = best.linePlies && best.linePlies[0]
+    ? best.linePlies[0]
+    : {
+        san: best.san,
+        color: view.turn,
+        purposes: view.purposes,
+        weaknesses: [],
+        fenBefore: view.fen,
+      };
+  bullet.append(pvLine(best, bind, (ply) => {
+    renderBecause(becauseHost, ply, bind);
+    if (onSelectPly) onSelectPly(ply);
+  }));
   intro.append(bullet);
   box.append(intro);
-
-  if (view.purposes.length) {
-    const reasons = el("div", "because");
-    reasons.append(el("p", "because-title", `${best.san} is beneficial because it`));
-    reasons.append(factList(view.purposes, "because-list", bind));
-    box.append(reasons);
-  }
+  renderBecause(becauseHost, start, bind);
+  box.append(becauseHost);
   return box;
 }
 
-function positionCards(view, depth, bind = noBind) {
+function positionCards(view, depth, bind = noBind, onSelectPly) {
   const cards = [];
 
   // Hero/summary card - always shown
@@ -576,7 +626,7 @@ function positionCards(view, depth, bind = noBind) {
 
   const best = view.candidates[0];
   if (best) {
-    cards.push(bestLineCard(view, bind));
+    cards.push(bestLineCard(view, bind, onSelectPly));
   }
 
   // Alternate lines stay available, but the first line lives in the explainer.
@@ -921,6 +971,22 @@ function wireTabs() {
   });
 }
 
+function showLinePly(board, ply, { turn } = {}) {
+  const after = ply.fenAfter || ply.fenBefore;
+  const before = ply.fenBefore || after;
+  board.lastMove = ply.uci
+    ? { from: ply.uci.slice(0, 2), to: ply.uci.slice(2, 4) }
+    : null;
+  // Draw the position after the clicked ply, with the move's arrow measured
+  // on the position it was played from.
+  board.setPosition(after);
+  board.showCue(ply.cue, before);
+  if (turn) {
+    const side = (after.split(" ")[1] === "b") ? "Black" : "White";
+    turn.textContent = `${side} to move · ${plyCaption(ply)}`;
+  }
+}
+
 /* ---------------- position tab ---------------- */
 
 function wirePosition(limits) {
@@ -960,7 +1026,9 @@ function wirePosition(limits) {
         multipv: Number($("pos-multipv").value),
       });
       board.clearCue();
-      renderPositionViews(report, data.views, data.depth, cueBinder(board));
+      renderPositionViews(report, data.views, data.depth, cueBinder(board), (ply) => {
+        showLinePly(board, ply, { turn: $("pos-turn") });
+      });
       $("pos-eval").textContent = evalText(data.views[0].evalCp);
       done(status, `Depth ${data.depth}`);
     } catch (error) {
@@ -1112,7 +1180,9 @@ function wirePlay(limits) {
         side: sideOf(),
         depth: Math.min(14, limits.maxPositionDepth),
       });
-      renderPositionViews(report, data.views, data.depth, cueBinder(board));
+      renderPositionViews(report, data.views, data.depth, cueBinder(board), (ply) => {
+        showLinePly(board, ply);
+      });
       done(status, `Depth ${data.depth}`);
     } catch (error) {
       failed(status, error);

@@ -85,7 +85,17 @@ def position_payload(facts: PositionFacts) -> Dict[str, Any]:
                         "color": side_word(ply.color),
                         "san": ply.san,
                         "uci": ply.uci,
+                        "fenBefore": ply.fen_before,
+                        "fenAfter": ply.fen_after,
                         "cue": _cue(ply.cue),
+                        "purposes": [
+                            {"text": purpose.describe(), "cue": _cue(purpose.cue)}
+                            for purpose in ply.purposes
+                        ],
+                        "weaknesses": [
+                            {"text": weakness.describe(), "cue": _cue(weakness.cue)}
+                            for weakness in ply.weaknesses
+                        ],
                     }
                     for ply in candidate.line
                 ],

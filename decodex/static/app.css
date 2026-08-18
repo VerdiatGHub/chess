@@ -852,10 +852,30 @@ textarea {
 
 .pv-move:hover,
 .pv-move:focus-visible,
-.pv-move.pinned {
+.pv-move.pinned,
+.pv-move.current {
   color: var(--slate);
   border-bottom-color: var(--slate);
   outline: none;
+}
+
+.pv-move.current {
+  background: rgba(126, 182, 224, 0.22);
+  border-bottom-style: solid;
+}
+
+.because-host {
+  display: grid;
+  gap: 10px;
+}
+
+.because-weak {
+  border-color: #d08a7a;
+  background: rgba(208, 138, 122, 0.08);
+}
+
+ul.facts.weak-list li::before {
+  border-color: #d08a7a;
 }
 
 .because {

@@ -17,7 +17,7 @@ from .concepts import Concept, describe_concepts
 from .cues import Cue, Insight, arrow, cue, move_cue
 from .engine import EvalTrace, RawEngine
 from .motifs import relation_insights, tactic_insights
-from .plans import Purpose, explain_move
+from .plans import Purpose, explain_move, explain_weaknesses
 from .roles import Role, describe_roles
 from .values import MATE_SCORE, PIECE_VALUE, piece_name, with_turn
 
@@ -92,7 +92,11 @@ class LinePly:
     color: chess.Color
     san: str
     uci: str
+    fen_before: str
+    fen_after: str
     cue: Cue = field(default_factory=Cue)
+    purposes: List[Purpose] = field(default_factory=list)
+    weaknesses: List[Purpose] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -128,15 +132,19 @@ def candidate_cue(board: chess.Board, pv: Sequence[chess.Move], *, depth: int = 
 
 
 def line_plies(board: chess.Board, pv: Sequence[chess.Move], *, limit: int = 16) -> List[LinePly]:
-    """Each ply of the engine line, so the UI can hover one move at a time.
+    """Each ply of the engine line, so the UI can step through it.
 
-    The sentence for the whole line is still `pv_san`. These objects exist so a
-    reader can ask what a later move in that line actually is, without the
-    reporter inventing a reason for it.
+    Clicking a ply should land on the position that move is played from and
+    explain that move from the remainder of the same line. Purposes are read
+    out of that suffix, never guessed.
     """
     steps: List[LinePly] = []
     walker = board.copy(stack=False)
+    previous: Optional[chess.Move] = None
     for index, move in enumerate(pv[:limit]):
+        suffix = list(pv[index:limit])
+        after = walker.copy(stack=False)
+        after.push(move)
         steps.append(
             LinePly(
                 ply=index,
@@ -144,10 +152,15 @@ def line_plies(board: chess.Board, pv: Sequence[chess.Move], *, limit: int = 16)
                 color=walker.turn,
                 san=walker.san(move),
                 uci=move.uci(),
-                cue=move_cue(move, tone="move" if index == 0 else "plan"),
+                fen_before=walker.fen(),
+                fen_after=after.fen(),
+                cue=move_cue(move, tone="move"),
+                purposes=explain_move(walker, suffix, previous=previous),
+                weaknesses=explain_weaknesses(walker, suffix),
             )
         )
-        walker.push(move)
+        previous = move
+        walker = after
     return steps
 
 
