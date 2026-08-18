@@ -74,6 +74,56 @@ function boardOrder(flipped) {
   return cells;
 }
 
+/* The centre of a square in board units, where the board is 8 by 8.
+ *
+ * Used as an SVG coordinate space, so an overlay drawn in these units lines up
+ * with the grid at any size without any pixel arithmetic. a8 is the top left
+ * cell for white, which is why the rank is subtracted rather than added.
+ */
+function squareCenter(square, flipped) {
+  const fileIndex = FILES.indexOf(square[0]);
+  const rank = Number(square[1]);
+  if (fileIndex < 0 || !(rank >= 1 && rank <= 8)) return null;
+  const column = flipped ? 7 - fileIndex : fileIndex;
+  const row = flipped ? rank - 1 : 8 - rank;
+  return { x: column + 0.5, y: row + 0.5 };
+}
+
+/* Where an arrow between two squares should start and stop.
+ *
+ * Both ends are pulled in: the tail so it does not obscure the piece making the
+ * claim, the head further still so the piece being pointed at stays visible.
+ * Returns null when the two squares are the same, or so close that the shortened
+ * line would invert.
+ */
+function arrowGeometry(from, to, flipped, options) {
+  const { tailGap = 0.3, headGap = 0.46 } = options || {};
+  const start = squareCenter(from, flipped);
+  const end = squareCenter(to, flipped);
+  if (!start || !end) return null;
+
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const span = Math.sqrt(dx * dx + dy * dy);
+  if (span === 0 || span <= tailGap + headGap) return null;
+
+  const ux = dx / span;
+  const uy = dy / span;
+  return {
+    x1: start.x + ux * tailGap,
+    y1: start.y + uy * tailGap,
+    x2: end.x - ux * headGap,
+    y2: end.y - uy * headGap,
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { FILES, isLightSquare, expandFen, boardOrder };
+  module.exports = {
+    FILES,
+    isLightSquare,
+    expandFen,
+    boardOrder,
+    squareCenter,
+    arrowGeometry,
+  };
 }

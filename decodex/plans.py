@@ -11,11 +11,12 @@ continuation does not contain the follow-up, no claim is made.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Sequence
 
 import chess
 
+from .cues import EMPTY, Cue, arrow, cue, move_cue
 from .values import PIECE_VALUE, join_words, short_piece
 
 
@@ -26,6 +27,7 @@ class Purpose:
     kind: str
     text: str
     ply: int
+    cue: Cue = field(default=EMPTY)
 
     def describe(self) -> str:
         return self.text
@@ -60,6 +62,15 @@ def _follow_up(
             kind="follow_up",
             text=f"intends to play {position.san(move)}",
             ply=index,
+            # Both hops of the plan: this move, then the same piece going on.
+            cue=cue(
+                actors=[first.from_square],
+                zone=[first.to_square, move.to_square],
+                arrows=[
+                    arrow(first.from_square, first.to_square, "move"),
+                    arrow(move.from_square, move.to_square, "plan"),
+                ],
+            ),
         )
     return None
 
@@ -100,7 +111,25 @@ def _prepared_squares(
                 f"supports bringing the {chess.piece_name(piece.piece_type)} "
                 f"to {target}"
             )
-        purposes.append(Purpose(kind="prepares", text=text, ply=index))
+        purposes.append(
+            Purpose(
+                kind="prepares",
+                text=text,
+                ply=index,
+                cue=cue(
+                    actors=[first.from_square],
+                    zone=[first.to_square],
+                    friends=[move.to_square],
+                    arrows=[
+                        arrow(first.from_square, first.to_square, "move"),
+                        arrow(move.from_square, move.to_square, "plan"),
+                        # The defence that makes the square available is the
+                        # causal link being claimed, so draw it too.
+                        arrow(first.to_square, move.to_square, "support"),
+                    ],
+                ),
+            )
+        )
     return purposes
 
 
@@ -130,6 +159,13 @@ def _rescues(board: chess.Board, move: chess.Move) -> Optional[Purpose]:
             f"{chess.square_name(move.from_square)}, where it was attacked"
         ),
         ply=0,
+        cue=cue(
+            actors=[move.from_square],
+            zone=[move.to_square],
+            targets=attackers,
+            arrows=[arrow(move.from_square, move.to_square, "move")]
+            + [arrow(square, move.from_square, "threat") for square in attackers],
+        ),
     )
 
 
@@ -140,6 +176,7 @@ def _defends(board: chess.Board, move: chess.Move) -> Optional[Purpose]:
     after.push(move)
     gained = set(after.attacks(move.to_square)) - set(board.attacks(move.from_square))
     rescued: List[str] = []
+    saved: List[chess.Square] = []
     for square in sorted(gained):
         piece = board.piece_at(square)
         if piece is None or piece.color != mover:
@@ -153,10 +190,20 @@ def _defends(board: chess.Board, move: chess.Move) -> Optional[Purpose]:
         if board.attackers(mover, square):
             continue
         rescued.append(short_piece(board, square))
+        saved.append(square)
     if not rescued:
         return None
     return Purpose(
-        kind="defends", text=f"defends {join_words(rescued)}", ply=0
+        kind="defends",
+        text=f"defends {join_words(rescued)}",
+        ply=0,
+        cue=cue(
+            actors=[move.from_square],
+            zone=[move.to_square],
+            friends=saved,
+            arrows=[arrow(move.from_square, move.to_square, "move")]
+            + [arrow(move.to_square, square, "support") for square in saved],
+        ),
     )
 
 
@@ -165,7 +212,10 @@ def _castling(board: chess.Board, move: chess.Move) -> Optional[Purpose]:
         return None
     side = "short" if chess.square_file(move.to_square) > 4 else "long"
     return Purpose(
-        kind="castling", text=f"castles {side}, tucking the king away", ply=0
+        kind="castling",
+        text=f"castles {side}, tucking the king away",
+        ply=0,
+        cue=move_cue(move),
     )
 
 
@@ -176,6 +226,7 @@ def _promotion(board: chess.Board, move: chess.Move) -> Optional[Purpose]:
         kind="promotion",
         text=f"promotes to a {chess.piece_name(move.promotion)}",
         ply=0,
+        cue=move_cue(move),
     )
 
 

@@ -71,9 +71,17 @@ function card(title, extraClass) {
   return box;
 }
 
-function factList(items, extraClass) {
+/* A list of facts. Items are `{text, cue}` from the server, or bare strings for
+ * lines the UI composes itself; `bind` attaches the geometry where there is any.
+ */
+function factList(items, extraClass, bind = noBind, fen) {
   const list = el("ul", extraClass ? `facts ${extraClass}` : "facts");
-  items.forEach((item) => list.append(el("li", null, item)));
+  items.forEach((item) => {
+    const text = typeof item === "string" ? item : item.text;
+    const node = el("li", null, text);
+    if (typeof item !== "string") bind(node, item.cue, fen);
+    list.append(node);
+  });
   return list;
 }
 
@@ -101,6 +109,51 @@ function fillRange(select, from, to, selected) {
 
 /* ---------------- board ---------------- */
 
+// Arrowheads are drawn as polygons rather than SVG markers, because a marker
+// scales with stroke width and the tone colours use different widths.
+const ARROW_HEAD = 0.3;
+const ARROW_HALF_WIDTH = 0.15;
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function svg(tag, className) {
+  const node = document.createElementNS(SVG_NS, tag);
+  if (className) node.setAttribute("class", className);
+  return node;
+}
+
+/* One arrow as a line plus a head, in the overlay's 8x8 coordinate space. */
+function arrowShapes(from, to, flipped, tone) {
+  const line = arrowGeometry(from, to, flipped);
+  if (!line) return [];
+  const dx = line.x2 - line.x1;
+  const dy = line.y2 - line.y1;
+  const span = Math.sqrt(dx * dx + dy * dy);
+  if (span === 0) return [];
+  const ux = dx / span;
+  const uy = dy / span;
+
+  // The shaft stops where the head begins, so the two do not overlap.
+  const shaft = svg("line", `arrow ${tone}`);
+  shaft.setAttribute("x1", line.x1);
+  shaft.setAttribute("y1", line.y1);
+  shaft.setAttribute("x2", line.x2 - ux * ARROW_HEAD);
+  shaft.setAttribute("y2", line.y2 - uy * ARROW_HEAD);
+
+  const baseX = line.x2 - ux * ARROW_HEAD;
+  const baseY = line.y2 - uy * ARROW_HEAD;
+  const head = svg("polygon", `arrow-head ${tone}`);
+  head.setAttribute(
+    "points",
+    [
+      `${line.x2},${line.y2}`,
+      `${baseX - uy * ARROW_HALF_WIDTH},${baseY + ux * ARROW_HALF_WIDTH}`,
+      `${baseX + uy * ARROW_HALF_WIDTH},${baseY - ux * ARROW_HALF_WIDTH}`,
+    ].join(" ")
+  );
+  return [shaft, head];
+}
+
 class Board {
   constructor(node, { onMove } = {}) {
     this.node = node;
@@ -111,6 +164,14 @@ class Board {
     this.lastMove = null;
     this.flipped = false;
     this.interactive = Boolean(onMove);
+    // Geometry for the fact currently being hovered, and the position it was
+    // measured on, which for a game review is not the position on the board.
+    this.cue = null;
+    this.previewFen = null;
+    this.overlay = svg("svg", "overlay");
+    this.overlay.setAttribute("viewBox", "0 0 8 8");
+    this.overlay.setAttribute("preserveAspectRatio", "none");
+    this.overlay.setAttribute("aria-hidden", "true");
     node.addEventListener("click", (event) => this._onClick(event));
   }
 
@@ -118,11 +179,30 @@ class Board {
     this.fen = fen;
     this.legal = legal;
     this.selected = null;
+    // A new position invalidates any geometry drawn for the old one.
+    this.cue = null;
+    this.previewFen = null;
+    this.render();
+  }
+
+  /* Draw one fact's geometry, optionally on the position it was measured on. */
+  showCue(cue, fen) {
+    this.cue = cue || null;
+    this.previewFen = fen || null;
+    this.render();
+  }
+
+  clearCue() {
+    this.cue = null;
+    this.previewFen = null;
     this.render();
   }
 
   _onClick(event) {
     if (!this.interactive) return;
+    // While a past position is on show, the legal moves belong to the live one,
+    // so a click here would mean something other than what the player sees.
+    if (this.previewFen) return;
     const cell = event.target.closest("[data-square]");
     if (!cell) return;
     const square = cell.dataset.square;
@@ -151,7 +231,10 @@ class Board {
   }
 
   render() {
-    const grid = expandFen(this.fen);
+    // While a cue is showing a different position, that position is what the
+    // arrows were measured against, so it is what must be drawn.
+    const fen = this.previewFen || this.fen;
+    const grid = expandFen(fen);
     // A malformed FEN draws nothing rather than a ragged grid.
     if (!grid) {
       this.node.replaceChildren();
@@ -162,6 +245,9 @@ class Board {
       this.selected
         ? this.legal.filter((m) => m.from === this.selected).map((m) => m.to)
         : []
+    );
+    const marks = new Map(
+      (this.cue ? this.cue.marks : []).map((mark) => [mark.square, mark.tone])
     );
 
     this.node.replaceChildren();
@@ -187,9 +273,12 @@ class Board {
       if (targets.has(cell.square)) {
         node.classList.add(piece ? "capture" : "target");
       }
-      if (this.lastMove &&
+      if (this.lastMove && !this.cue &&
           (cell.square === this.lastMove.from || cell.square === this.lastMove.to)) {
         node.classList.add("last");
+      }
+      if (marks.has(cell.square)) {
+        node.classList.add(`mark-${marks.get(cell.square)}`);
       }
       if (cell.showFile) {
         node.append(el("span", "coord file", FILES[cell.fileIndex]));
@@ -199,17 +288,89 @@ class Board {
       }
       this.node.append(node);
     }
+
+    this.overlay.replaceChildren();
+    for (const item of this.cue ? this.cue.arrows : []) {
+      this.overlay.append(...arrowShapes(item.from, item.to, this.flipped, item.tone));
+    }
+    this.node.append(this.overlay);
   }
 }
 
-/* ---------------- position report ---------------- */
-
-function renderPositionViews(target, views, depth) {
-  target.replaceChildren();
-  views.forEach((view) => target.append(...positionCards(view, depth)));
+/* Bind report items to a board, so hovering a statement draws it.
+ *
+ * A fresh binder per rendered report, because the pin it remembers belongs to
+ * nodes that the next render throws away. Click pins the cue, which is the only
+ * way to see it on a touch screen.
+ *
+ * `onLabel` is called with the label of the item being shown, or null when
+ * nothing is, so a caller can caption the board.
+ */
+function cueBinder(board, onLabel) {
+  let pinned = null;
+  const label = (text) => {
+    if (onLabel) onLabel(text);
+  };
+  return function bind(node, cue, fen, text) {
+    if (!cue || (!cue.marks.length && !cue.arrows.length)) return node;
+    node.classList.add("cued");
+    // Focusable, so the geometry is reachable without a pointer. The nodes are
+    // list items and divs, so they need the tab stop declared.
+    node.tabIndex = 0;
+    const show = () => {
+      board.showCue(cue, fen);
+      label(text || null);
+    };
+    const hide = () => {
+      if (pinned === node) return;
+      board.clearCue();
+      label(null);
+    };
+    const toggle = () => {
+      if (pinned === node) {
+        pinned = null;
+        node.classList.remove("pinned");
+        node.setAttribute("aria-pressed", "false");
+        board.clearCue();
+        label(null);
+        return;
+      }
+      if (pinned) {
+        pinned.classList.remove("pinned");
+        pinned.setAttribute("aria-pressed", "false");
+      }
+      pinned = node;
+      node.classList.add("pinned");
+      node.setAttribute("aria-pressed", "true");
+      show();
+    };
+    node.setAttribute("role", "button");
+    node.setAttribute("aria-pressed", "false");
+    node.addEventListener("mouseenter", show);
+    node.addEventListener("mouseleave", hide);
+    node.addEventListener("focusin", show);
+    node.addEventListener("focusout", hide);
+    node.addEventListener("click", toggle);
+    node.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggle();
+    });
+    return node;
+  };
 }
 
-function positionCards(view, depth) {
+/* A binder that does nothing, for reports rendered without a board. */
+const noBind = (node) => node;
+
+/* ---------------- position report ---------------- */
+
+function renderPositionViews(target, views, depth, bind = noBind) {
+  target.replaceChildren();
+  views.forEach((view) => target.append(...positionCards(view, depth, bind)));
+}
+
+function positionCards(view, depth, bind = noBind) {
   const cards = [];
 
   const hero = card(null, "hero");
@@ -240,6 +401,7 @@ function positionCards(view, depth) {
       line.append(el("span", "move", `${c.rank}. ${c.san}`));
       line.append(el("span", "score", scoreText(c.evalCp, c.mate)));
       line.append(el("span", "pv", c.line));
+      bind(line, c.cue);
       lines.append(line);
     });
     box.append(lines);
@@ -249,33 +411,40 @@ function positionCards(view, depth) {
   if (view.purposes.length) {
     const best = view.candidates[0] ? view.candidates[0].san : "The best move";
     const box = card(`${best} is good because it`);
-    box.append(factList(view.purposes));
+    box.append(factList(view.purposes, null, bind));
     cards.push(box);
   }
 
+  // The two threats are labelled by when they apply, so they are relabelled
+  // here rather than shown as the server phrased them.
   const threats = [];
-  if (view.threatBefore) threats.push(`Before: ${view.threatBefore.text}`);
+  if (view.threatBefore) {
+    threats.push({ text: `Before: ${view.threatBefore.text}`, cue: view.threatBefore.cue });
+  }
   if (view.threatAfterBest) {
     const best = view.candidates[0] ? view.candidates[0].san : "the best move";
-    threats.push(`After ${best}: ${view.threatAfterBest.text}`);
+    threats.push({
+      text: `After ${best}: ${view.threatAfterBest.text}`,
+      cue: view.threatAfterBest.cue,
+    });
   }
   if (threats.length || view.neutralised.length || view.created.length) {
     const box = card("Threats");
-    if (threats.length) box.append(factList(threats));
+    if (threats.length) box.append(factList(threats, null, bind));
     if (view.neutralised.length) {
       box.append(el("h3", null, "This move defuses"));
-      box.append(factList(view.neutralised, "defused"));
+      box.append(factList(view.neutralised, "defused", bind));
     }
     if (view.created.length) {
       box.append(el("h3", null, "This move concedes"));
-      box.append(factList(view.created, "conceded"));
+      box.append(factList(view.created, "conceded", bind));
     }
     cards.push(box);
   }
 
   if (view.tactics.length) {
     const box = card("Tactics on the board");
-    box.append(factList(view.tactics));
+    box.append(factList(view.tactics, null, bind));
     cards.push(box);
   }
 
@@ -283,9 +452,12 @@ function positionCards(view, depth) {
     const box = card("Loose material");
     box.append(
       factList(
-        view.hanging.map(
-          (h) => `${h.piece} on ${h.square} falls to ${h.captureSan} (${evalText(h.lossCp)})`
-        )
+        view.hanging.map((h) => ({
+          text: `${h.piece} on ${h.square} falls to ${h.captureSan} (${evalText(h.lossCp)})`,
+          cue: h.cue,
+        })),
+        null,
+        bind
       )
     );
     cards.push(box);
@@ -293,13 +465,13 @@ function positionCards(view, depth) {
 
   if (view.observations.length) {
     const box = card("Pay attention to");
-    box.append(factList(view.observations));
+    box.append(factList(view.observations, null, bind));
     cards.push(box);
   }
 
   if (view.roles.length) {
     const box = card(`Piece roles for ${view.perspective}`);
-    box.append(factList(view.roles));
+    box.append(factList(view.roles, null, bind));
     cards.push(box);
   }
 
@@ -314,6 +486,7 @@ function positionCards(view, depth) {
         value.append(el("span", `tag ${c.favours.toLowerCase()}`, c.favours));
       }
       row.append(value);
+      bind(row, c.cue);
       kv.append(row);
     });
     box.append(kv);
@@ -343,6 +516,7 @@ function positionCards(view, depth) {
         );
       }
       row.append(value);
+      bind(row, c.cue);
       bars.append(row);
     });
     box.append(bars);
@@ -357,7 +531,7 @@ function positionCards(view, depth) {
 
 /* ---------------- game report ---------------- */
 
-function renderGame(target, data) {
+function renderGame(target, data, bind = noBind) {
   target.replaceChildren();
 
   const head = card(null, "hero");
@@ -385,7 +559,9 @@ function renderGame(target, data) {
       stem.style.animationDelay = `${Math.min(index * 8, 600)}ms`;
       const move = data.moves[index];
       if (move) {
-        cell.title = `${move.moveNumber}${move.mover === "White" ? "." : "..."} ${move.san} — ${evalText(cp)}`;
+        cell.title = `${moveLabel(move)} — ${evalText(cp)}`;
+        // Hovering the graph replays that move on the board it was played on.
+        bind(cell, move.cue, move.fenBefore, `${moveLabel(move)} · ${evalText(cp)}`);
       }
       cell.append(stem);
       graph.append(cell);
@@ -400,11 +576,11 @@ function renderGame(target, data) {
   }
 
   const sides = el("div", data.sides.length > 1 ? "sides two" : "sides");
-  data.sides.forEach((side) => sides.append(sideCard(side)));
+  data.sides.forEach((side) => sides.append(sideCard(side, bind)));
   target.append(sides);
 }
 
-function sideCard(side) {
+function sideCard(side, bind = noBind) {
   const box = card(side.side);
 
   const strip = el("div", "stat-strip");
@@ -426,14 +602,14 @@ function sideCard(side) {
 
   if (side.turningPoints.length) {
     box.append(el("h3", null, "Turning points"));
-    box.append(moveList(side.turningPoints));
+    box.append(moveList(side.turningPoints, bind));
   } else {
     box.append(el("p", "note", "No inaccuracies or worse."));
   }
 
   if (side.goodMoves.length) {
     box.append(el("h3", null, "Good moves"));
-    box.append(moveList(side.goodMoves));
+    box.append(moveList(side.goodMoves, bind));
   }
 
   return box;
@@ -446,7 +622,7 @@ function stat(value, label) {
   return box;
 }
 
-function moveList(moves) {
+function moveList(moves, bind = noBind) {
   const list = el("div", "moves");
   moves.forEach((move) => {
     const row = el("div", "move-row");
@@ -454,9 +630,14 @@ function moveList(moves) {
     row.append(el("span", "san", move.san));
     row.append(el("span", `verdict-chip v-${move.verdict}`, move.verdict));
     row.append(el("span", "why", explainMove(move)));
+    bind(row, move.cue, move.fenBefore, moveLabel(move));
     list.append(row);
   });
   return list;
+}
+
+function moveLabel(move) {
+  return `${move.moveNumber}${move.mover === "White" ? "." : "..."} ${move.san}`;
 }
 
 function explainMove(move) {
@@ -491,6 +672,53 @@ function done(node, message = "") {
 function failed(node, error) {
   node.className = "status-line err";
   node.textContent = error.message || String(error);
+}
+
+/* ---------------- theme ---------------- */
+
+const THEME_KEY = "decodex-theme";
+
+/* Light and dark, remembered per browser.
+ *
+ * The stored choice wins over the system preference, since a visitor who has
+ * pressed the button has said what they want. With nothing stored the OS
+ * setting decides, and the page follows it if it changes.
+ */
+function wireTheme() {
+  const button = $("theme-toggle");
+  const system = window.matchMedia("(prefers-color-scheme: light)");
+  let stored = null;
+  try {
+    stored = localStorage.getItem(THEME_KEY);
+  } catch {
+    /* Private browsing can refuse storage; the toggle still works per page. */
+  }
+
+  function apply(theme) {
+    const light = theme === "light";
+    document.documentElement.dataset.theme = light ? "light" : "dark";
+    button.setAttribute("aria-pressed", String(light));
+    // The label names the theme the button switches to, not the current one.
+    $("theme-label").textContent = light ? "Dark" : "Light";
+    $("theme-icon").textContent = light ? "◑" : "◐";
+    button.title = light ? "Switch to dark" : "Switch to light";
+  }
+
+  apply(stored || (system.matches ? "light" : "dark"));
+
+  system.addEventListener("change", (event) => {
+    if (!stored) apply(event.matches ? "light" : "dark");
+  });
+
+  button.addEventListener("click", () => {
+    stored = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    try {
+      localStorage.setItem(THEME_KEY, stored);
+    } catch {
+      /* Not persisting is acceptable; the current page still switches. */
+    }
+    apply(stored);
+  });
 }
 
 /* ---------------- tabs ---------------- */
@@ -546,7 +774,8 @@ function wirePosition(limits) {
         depth: Number($("pos-depth").value),
         multipv: Number($("pos-multipv").value),
       });
-      renderPositionViews(report, data.views, data.depth);
+      board.clearCue();
+      renderPositionViews(report, data.views, data.depth, cueBinder(board));
       $("pos-eval").textContent = evalText(data.views[0].evalCp);
       done(status, `Depth ${data.depth}`);
     } catch (error) {
@@ -566,8 +795,11 @@ function wireGame(limits) {
   const sideOf = segmented($("game-side"));
   const status = $("game-status");
   const report = $("game-report");
+  const board = new Board($("game-board"));
+  const note = $("game-board-note");
 
   fillRange($("game-depth"), 6, limits.maxGameDepth, Math.min(10, limits.maxGameDepth));
+  board.setPosition(START_FEN);
 
   $("game-go").addEventListener("click", async () => {
     const button = $("game-go");
@@ -584,7 +816,16 @@ function wireGame(limits) {
         ? { pgn: text, side: sideOf(), depth: Number($("game-depth").value) }
         : { moves: text, side: sideOf(), depth: Number($("game-depth").value) };
       const data = await api("/api/game", body);
-      renderGame(report, data);
+      board.clearCue();
+      renderGame(
+        report,
+        data,
+        cueBinder(board, (label) => {
+          note.textContent = label || "Hover a move to see it";
+        })
+      );
+      note.textContent = "Hover a move to see it";
+      $("game-eval").textContent = "";
       done(status, `${data.moves.length} half-moves at depth ${data.depth}`);
     } catch (error) {
       failed(status, error);
@@ -686,7 +927,7 @@ function wirePlay(limits) {
         side: sideOf(),
         depth: Math.min(14, limits.maxPositionDepth),
       });
-      renderPositionViews(report, data.views, data.depth);
+      renderPositionViews(report, data.views, data.depth, cueBinder(board));
       done(status, `Depth ${data.depth}`);
     } catch (error) {
       failed(status, error);
@@ -709,7 +950,16 @@ function wirePlay(limits) {
         side: sideOf(),
         depth: Math.min(8, limits.maxGameDepth),
       });
-      renderGame(report, data);
+      // A review points at earlier positions, so the board says which one it is
+      // showing rather than silently contradicting the game state.
+      const live = $("play-status-text").textContent;
+      renderGame(
+        report,
+        data,
+        cueBinder(board, (label) => {
+          $("play-status-text").textContent = label ? `showing ${label}` : live;
+        })
+      );
       done(status, `${data.moves.length} half-moves at depth ${data.depth}`);
     } catch (error) {
       failed(status, error);
@@ -724,6 +974,7 @@ function wirePlay(limits) {
 /* ---------------- boot ---------------- */
 
 (async function start() {
+  wireTheme();
   wireTabs();
   let limits = {
     maxPositionDepth: 18,

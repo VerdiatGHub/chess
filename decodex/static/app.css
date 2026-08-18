@@ -1,4 +1,7 @@
-:root {
+/* Palette. Every colour the UI uses is named here twice, once per theme, so a
+   component never has to know which theme is active. */
+:root,
+:root[data-theme="dark"] {
   --ink: #0b0c0e;
   --panel: #14161a;
   --panel-2: #1b1e24;
@@ -11,12 +14,76 @@
   --rust: #b4553a;
   --sage: #7d9a6b;
   --slate: #5b7c99;
+  --grain: 0.035;
+  --glow-ochre: rgba(200, 150, 62, 0.09);
+  --glow-slate: rgba(91, 124, 153, 0.07);
+  --card-shadow: 0 26px 60px rgba(0, 0, 0, 0.55);
+  --hairline: rgba(42, 47, 56, 0.6);
+  --track: rgba(42, 47, 56, 0.9);
+  --hover: rgba(200, 150, 62, 0.1);
+  --axis: rgba(168, 164, 154, 0.28);
+  --amber: #c47a4a;
+  --dot: rgba(24, 22, 18, 0.3);
+  --wash-last: rgba(200, 150, 62, 0.32);
+  --wash-sel: rgba(200, 150, 62, 0.5);
+  --coord-light: rgba(78, 72, 58, 0.72);
+  --coord-dark: rgba(232, 228, 218, 0.6);
+  /* Cue tones. Five arrow colours and four square washes, shared by the board
+     overlay and the legend that explains it. */
+  --cue-move: #e5b45a;
+  --cue-plan: #7d9a6b;
+  --cue-attack: #b4553a;
+  --cue-support: #4f9c8c;
+  --cue-threat: #a86bbd;
+  --wash-actor: rgba(229, 180, 90, 0.5);
+  --wash-target: rgba(180, 85, 58, 0.5);
+  --wash-friend: rgba(125, 154, 107, 0.46);
+  --wash-zone: rgba(91, 124, 153, 0.3);
   /* lichess's default brown board, which the cburnett pieces are drawn for. */
   --light-sq: #f0d9b5;
   --dark-sq: #b58863;
   --board-edge: #2a2721;
   --serif: "Spectral", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --mono: "JetBrains Mono", "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+/* Light mode is a warm paper theme rather than inverted greys: the board keeps
+   its brown squares, so the piece art still sits on the colours it was drawn
+   for, and the accents darken enough to hold contrast on a pale ground. */
+:root[data-theme="light"] {
+  --ink: #f4f1ea;
+  --panel: #fbf9f4;
+  --panel-2: #f2eee4;
+  --rule: #d8d1c2;
+  --paper: #201d18;
+  --paper-dim: #55504a;
+  --paper-faint: #7c766c;
+  --ochre: #a9741d;
+  --ochre-bright: #8a5c12;
+  --rust: #96361c;
+  --sage: #4a6b39;
+  --slate: #3c5f7d;
+  --grain: 0.02;
+  --glow-ochre: rgba(169, 116, 29, 0.08);
+  --glow-slate: rgba(60, 95, 125, 0.07);
+  --card-shadow: 0 18px 40px rgba(32, 29, 24, 0.12);
+  --hairline: rgba(216, 209, 194, 0.9);
+  --track: rgba(216, 209, 194, 0.95);
+  --hover: rgba(169, 116, 29, 0.12);
+  --axis: rgba(85, 80, 74, 0.32);
+  --amber: #9a5320;
+  --dot: rgba(40, 34, 24, 0.32);
+  --coord-light: rgba(78, 72, 58, 0.8);
+  --coord-dark: rgba(250, 246, 238, 0.75);
+  --board-edge: #b3a68d;
+  /* The board itself does not change between themes, so the washes do not
+     either. The arrow colours deepen, because the same swatches also appear in
+     the legend, which does sit on a pale panel. */
+  --cue-move: #b57d16;
+  --cue-plan: #4f7038;
+  --cue-attack: #9c3f22;
+  --cue-support: #2c7b6c;
+  --cue-threat: #7c3f93;
 }
 
 *,
@@ -28,8 +95,8 @@
 body {
   margin: 0;
   background:
-    radial-gradient(1200px 700px at 78% -10%, rgba(200, 150, 62, 0.09), transparent 60%),
-    radial-gradient(900px 600px at 5% 100%, rgba(91, 124, 153, 0.07), transparent 65%),
+    radial-gradient(1200px 700px at 78% -10%, var(--glow-ochre), transparent 60%),
+    radial-gradient(900px 600px at 5% 100%, var(--glow-slate), transparent 65%),
     var(--ink);
   color: var(--paper);
   font-family: var(--serif);
@@ -38,14 +105,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Paper grain, so the dark panels do not read as flat black. */
+/* Paper grain, so the flat panels do not read as flat colour. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.035;
+  opacity: var(--grain);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
@@ -101,6 +168,36 @@ body::before {
 .masthead-meta b {
   color: var(--sage);
   font-weight: 500;
+}
+
+/* The theme switch sits with the masthead metadata rather than floating, so it
+   reads as part of the page's own information rather than a control bar. */
+.theme-toggle {
+  appearance: none;
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--paper-faint);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 6px 11px;
+  cursor: pointer;
+  transition: color 0.16s, border-color 0.16s;
+}
+
+.theme-toggle:hover {
+  color: var(--paper);
+  border-color: var(--paper-faint);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--ochre);
+  outline-offset: 2px;
 }
 
 /* ---------- tabs ---------- */
@@ -168,10 +265,11 @@ body::before {
   background: var(--board-edge);
   padding: 12px;
   border: 1px solid var(--rule);
-  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--card-shadow);
 }
 
 .board {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
@@ -225,11 +323,11 @@ body::before {
 }
 
 .sq.last::before {
-  background: rgba(200, 150, 62, 0.32);
+  background: var(--wash-last);
 }
 
 .sq.sel::before {
-  background: rgba(200, 150, 62, 0.5);
+  background: var(--wash-sel);
 }
 
 /* An empty destination gets a dot, an occupied one a ring, so a capture is
@@ -249,13 +347,135 @@ body::before {
   height: 30%;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: rgba(24, 22, 18, 0.3);
+  background: var(--dot);
 }
 
 .sq.capture::after {
   inset: 5%;
   border-radius: 50%;
-  border: 0.4vw solid rgba(24, 22, 18, 0.3);
+  border: 0.4vw solid var(--dot);
+}
+
+/* ---------- explanation cues ---------- */
+
+/* Four tones, and no more: the piece making the claim, what it acts on, what it
+   protects, and the squares merely involved. A reader learns four colours. */
+.sq.mark-actor::before,
+.sq.mark-target::before,
+.sq.mark-friend::before,
+.sq.mark-zone::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.sq.mark-actor::before { background: var(--wash-actor); }
+.sq.mark-target::before { background: var(--wash-target); }
+.sq.mark-friend::before { background: var(--wash-friend); }
+.sq.mark-zone::before { background: var(--wash-zone); }
+
+/* The overlay spans the grid and is measured in board units, so arrows land on
+   square centres at any board size. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 6;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.arrow {
+  stroke-width: 0.13;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.arrow-head {
+  stroke: none;
+}
+
+/* Tones match the legend: the move to play, the plan behind it, what attacks
+   what, what defends what, and what the opponent is threatening. */
+.arrow.move, .arrow-head.move { stroke: var(--cue-move); fill: var(--cue-move); }
+.arrow.plan, .arrow-head.plan { stroke: var(--cue-plan); fill: var(--cue-plan); }
+.arrow.attack, .arrow-head.attack { stroke: var(--cue-attack); fill: var(--cue-attack); }
+.arrow.support, .arrow-head.support { stroke: var(--cue-support); fill: var(--cue-support); }
+.arrow.threat, .arrow-head.threat { stroke: var(--cue-threat); fill: var(--cue-threat); }
+
+.arrow.plan {
+  stroke-dasharray: 0.26 0.2;
+}
+
+/* A statement that can be drawn says so, and shows which one is on the board. */
+.cued {
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.14s;
+}
+
+.cued:hover,
+.cued:focus-within {
+  background: var(--hover);
+}
+
+.cued:focus-visible {
+  outline: 2px solid var(--ochre);
+  outline-offset: 1px;
+}
+
+.cued.pinned {
+  background: var(--hover);
+  box-shadow: inset 2px 0 0 var(--ochre);
+}
+
+ul.facts li.cued {
+  margin-left: -6px;
+  padding-left: 26px;
+}
+
+ul.facts li.cued::before {
+  left: 8px;
+}
+
+.cue-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-faint);
+}
+
+.cue-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cue-legend li:not(.hint)::before {
+  content: "";
+  width: 15px;
+  height: 2px;
+}
+
+.cue-legend .move::before { background: var(--cue-move); }
+.cue-legend .plan::before { background: var(--cue-plan); }
+.cue-legend .attack::before { background: var(--cue-attack); }
+.cue-legend .support::before { background: var(--cue-support); }
+.cue-legend .threat::before { background: var(--cue-threat); }
+
+.cue-legend .hint {
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0.02em;
 }
 
 .sq .coord {
@@ -279,11 +499,11 @@ body::before {
 }
 
 .sq.light .coord {
-  color: rgba(78, 72, 58, 0.72);
+  color: var(--coord-light);
 }
 
 .sq.dark .coord {
-  color: rgba(232, 228, 218, 0.6);
+  color: var(--coord-dark);
 }
 
 .board-status {
@@ -591,7 +811,7 @@ ul.facts.conceded li::before { background: var(--rust); }
   gap: 16px;
   align-items: baseline;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(42, 47, 56, 0.6);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .kv-row:last-child {
@@ -645,7 +865,7 @@ ul.facts.conceded li::before { background: var(--rust); }
 
 .bar-track {
   height: 5px;
-  background: rgba(42, 47, 56, 0.9);
+  background: var(--track);
 }
 
 .bar-fill {
@@ -689,7 +909,7 @@ ul.facts.conceded li::before { background: var(--rust); }
   left: 0;
   right: 0;
   top: 50%;
-  border-top: 1px dashed rgba(168, 164, 154, 0.28);
+  border-top: 1px dashed var(--axis);
 }
 
 .stem-cell {
@@ -787,7 +1007,7 @@ ul.facts.conceded li::before { background: var(--rust); }
   gap: 14px;
   align-items: baseline;
   padding-bottom: 9px;
-  border-bottom: 1px solid rgba(42, 47, 56, 0.55);
+  border-bottom: 1px solid var(--hairline);
 }
 
 .move-row:last-child {
@@ -823,7 +1043,7 @@ ul.facts.conceded li::before { background: var(--rust); }
 }
 
 .v-blunder { color: var(--rust); }
-.v-mistake { color: #c47a4a; }
+.v-mistake { color: var(--amber); }
 .v-inaccuracy { color: var(--ochre); }
 .v-good, .v-excellent { color: var(--sage); }
 .v-best { color: var(--ochre-bright); }

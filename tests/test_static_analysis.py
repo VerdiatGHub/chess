@@ -14,12 +14,12 @@ from decodex.concepts import (
     undeveloped,
 )
 from decodex.motifs import (
-    describe_relations,
-    describe_tactics,
     find_alignments,
     find_batteries,
     find_discovered_attacks,
     find_forks,
+    relation_insights,
+    tactic_insights,
 )
 from decodex.plans import explain_move
 from decodex.roles import describe_roles
@@ -27,6 +27,11 @@ from decodex.values import join_words, with_turn
 
 # The position the user brought from DecodeChess, move 15 of a Sicilian Dragon.
 DRAGON = "2r1k2r/1pq1ppbp/p2pbnp1/8/3BP1P1/1BN2P2/PPPQ3P/1K1R3R w k - 1 15"
+
+
+def relation_texts(board: chess.Board) -> list[str]:
+    """The relation sentences alone, for tests about wording and ordering."""
+    return [item.text for item in relation_insights(board)]
 
 
 def test_assessment_bands_run_from_equal_to_decisive():
@@ -145,27 +150,27 @@ def test_discovered_attack_names_the_uncovered_piece():
 
 
 def test_relations_put_captures_before_defences():
-    lines = describe_relations(chess.Board(DRAGON))
+    lines = relation_texts(chess.Board(DRAGON))
     first_support = next(i for i, text in enumerate(lines) if "supports" in text)
     assert all("can capture" in text for text in lines[:first_support])
 
 
 def test_relations_match_what_decodechess_points_out():
-    lines = describe_relations(chess.Board(DRAGON))
+    lines = relation_texts(chess.Board(DRAGON))
     assert "the black bishop on e6 can capture the white bishop on b3" in lines
     assert "the white pawn on a2 supports the white bishop on b3" in lines
 
 
 def test_defence_of_an_unattacked_piece_is_not_worth_a_line():
     # Rd1 guards Rh1, but nothing is attacking Rh1, so it says nothing useful.
-    lines = describe_relations(chess.Board(DRAGON))
+    lines = relation_texts(chess.Board(DRAGON))
     assert "the white rook on d1 supports the white rook on h1" not in lines
 
 
 def test_tactics_lead_with_standing_geometry():
-    lines = describe_tactics(chess.Board(DRAGON))
-    assert lines
-    assert "pinned" in lines[0]
+    items = tactic_insights(chess.Board(DRAGON))
+    assert items
+    assert "pinned" in items[0].text
 
 
 def test_purpose_reads_the_follow_up_out_of_the_line():

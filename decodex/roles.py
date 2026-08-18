@@ -9,10 +9,11 @@ demonstrably true or it is not claimed.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Sequence
+from typing import List, Optional, Sequence, Tuple
 
 import chess
 
+from .cues import Cue, arrow, cue
 from .values import PIECE_VALUE, color_word, join_words, short_piece, with_turn
 
 
@@ -25,6 +26,9 @@ class Role:
     color: chess.Color
     labels: List[str] = field(default_factory=list)
     value_cp: int = 0
+    guarding: Tuple[chess.Square, ...] = ()
+    attacking: Tuple[chess.Square, ...] = ()
+    shelters: Optional[chess.Square] = None
 
     @property
     def name(self) -> str:
@@ -37,6 +41,23 @@ class Role:
             f"{join_clauses(self.labels)}"
         )
 
+    def cue(self) -> Cue:
+        """The piece, what it guards, what it attacks, and the king it shields.
+
+        Duties without a second square — pinned, on an outpost, out of moves —
+        still light the piece itself, which is the whole claim in those cases.
+        """
+        friends = list(self.guarding)
+        if self.shelters is not None:
+            friends.append(self.shelters)
+        return cue(
+            actors=[self.square],
+            friends=friends,
+            targets=list(self.attacking),
+            arrows=[arrow(self.square, target, "support") for target in self.guarding]
+            + [arrow(self.square, target, "attack") for target in self.attacking],
+        )
+
 
 def join_clauses(labels: Sequence[str]) -> str:
     if len(labels) <= 1:
@@ -44,7 +65,7 @@ def join_clauses(labels: Sequence[str]) -> str:
     return ", ".join(labels[:-1]) + f", and {labels[-1]}"
 
 
-def _guards(board: chess.Board, square: chess.Square, color: chess.Color) -> List[str]:
+def _guards(board: chess.Board, square: chess.Square, color: chess.Color) -> List[chess.Square]:
     """Friendly pieces of real value that this piece defends, and that need it."""
     guarded = []
     for target in board.attacks(square):
@@ -57,7 +78,7 @@ def _guards(board: chess.Board, square: chess.Square, color: chess.Color) -> Lis
             continue
         if not board.attackers(not color, target):
             continue
-        guarded.append(short_piece(board, target))
+        guarded.append(target)
     return guarded
 
 
@@ -188,6 +209,7 @@ def describe_roles(
     """
     roles: List[Role] = []
     shelter = set(_king_shelter(board, color))
+    king = board.king(color)
     # Mobility and pin questions are only meaningful when this side is to move.
     movable = with_turn(board, color)
     for square, piece in board.piece_map().items():
@@ -197,7 +219,7 @@ def describe_roles(
 
         guarded = _guards(board, square, color)
         sole = [
-            short_piece(board, target)
+            target
             for target in board.attacks(square)
             if (occupant := board.piece_at(target)) is not None
             and occupant.color == color
@@ -207,23 +229,33 @@ def describe_roles(
             and _is_only_defender(board, square, target, color)
         ]
         if sole:
-            labels.append(f"is the only defender of {join_words(sole)}")
+            labels.append(
+                f"is the only defender of "
+                f"{join_words([short_piece(board, t) for t in sole])}"
+            )
         elif guarded:
-            labels.append(f"defends {join_words(guarded)}")
+            labels.append(
+                f"defends {join_words([short_piece(board, t) for t in guarded])}"
+            )
+        guarding = sole or guarded
 
         attacked = [
-            short_piece(board, target)
+            target
             for target in board.attacks(square)
             if (occupant := board.piece_at(target)) is not None
             and occupant.color != color
             and PIECE_VALUE[occupant.piece_type] >= PIECE_VALUE[chess.KNIGHT]
         ]
         if attacked:
-            labels.append(f"attacks {join_words(attacked)}")
+            labels.append(
+                f"attacks {join_words([short_piece(board, t) for t in attacked])}"
+            )
 
+        shields_king = False
         if piece.piece_type == chess.PAWN:
             if square in shelter:
                 labels.append("shields the king")
+                shields_king = True
             if not labels:
                 continue
         else:
@@ -253,6 +285,9 @@ def describe_roles(
                 color=color,
                 labels=labels,
                 value_cp=PIECE_VALUE[piece.piece_type],
+                guarding=tuple(guarding),
+                attacking=tuple(attacked),
+                shelters=king if shields_king else None,
             )
         )
 

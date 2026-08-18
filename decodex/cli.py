@@ -14,7 +14,7 @@ from .concepts import describe_concepts
 from .engine import RawEngine, find_engine
 from .facts import analyse_position
 from .game import GameReview, load_pgn, moves_from_uci, review_game
-from .motifs import describe_tactics
+from .motifs import tactic_insights
 from .play import PlaySession
 from .report import render_game, render_position, side_name
 from .roles import describe_roles
@@ -161,13 +161,13 @@ def _concepts_now(session: PlaySession) -> None:
 
 
 def _tactics_now(session: PlaySession) -> None:
-    lines = describe_tactics(session.board)
-    if not lines:
+    items = tactic_insights(session.board)
+    if not items:
         print("No tactical motifs on the board.")
         return
     print("Tactics on the board")
-    for line in lines:
-        print(f"  - {line}")
+    for item in items:
+        print(f"  - {item.text}")
     print()
 
 

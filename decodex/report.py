@@ -83,15 +83,15 @@ def render_position(facts: PositionFacts) -> str:
 
     if facts.neutralised:
         lines.append("  this move defuses:")
-        lines.extend(f"    - {item}" for item in facts.neutralised)
+        lines.extend(f"    - {item.text}" for item in facts.neutralised)
     if facts.created:
         lines.append("  this move concedes:")
-        lines.extend(f"    - {item}" for item in facts.created)
+        lines.extend(f"    - {item.text}" for item in facts.created)
 
     if facts.tactics:
         lines.append("")
         lines.append("Tactics on the board")
-        lines.extend(f"  - {item}" for item in facts.tactics)
+        lines.extend(f"  - {item.text}" for item in facts.tactics)
 
     if facts.hanging:
         lines.append("")
@@ -105,7 +105,7 @@ def render_position(facts: PositionFacts) -> str:
     if facts.observations:
         lines.append("")
         lines.append("Pay attention to")
-        lines.extend(f"  - {item}" for item in facts.observations)
+        lines.extend(f"  - {item.text}" for item in facts.observations)
 
     if facts.roles:
         lines.append("")

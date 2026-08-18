@@ -9,6 +9,21 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css">
+<script>
+  // Set the theme before first paint, so a light-mode visitor never sees the
+  // dark palette flash. app.js owns the toggle from here on.
+  (function () {
+    try {
+      var stored = localStorage.getItem("decodex-theme");
+      var light = stored
+        ? stored === "light"
+        : window.matchMedia("(prefers-color-scheme: light)").matches;
+      document.documentElement.dataset.theme = light ? "light" : "dark";
+    } catch (e) {
+      document.documentElement.dataset.theme = "dark";
+    }
+  })();
+</script>
 </head>
 <body>
 <div class="shell">
@@ -25,6 +40,10 @@
       <div>Stockfish · <b id="engine-name">loading</b></div>
       <div id="limits-note">depth ceiling —</div>
       <div>free · no account</div>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false">
+        <span aria-hidden="true" id="theme-icon">◐</span>
+        <span id="theme-label">Light</span>
+      </button>
     </div>
   </header>
 
@@ -45,6 +64,14 @@
           <span id="pos-turn">White to move</span>
           <span class="eval" id="pos-eval"></span>
         </div>
+        <ul class="cue-legend">
+          <li class="move">move</li>
+          <li class="plan">plan</li>
+          <li class="attack">attack</li>
+          <li class="support">defence</li>
+          <li class="threat">threat</li>
+          <li class="hint">hover a statement · click to pin</li>
+        </ul>
 
         <div class="controls">
           <div class="field">
@@ -94,27 +121,42 @@
   <!-- ---------------- GAME ---------------- -->
   <section class="panel" id="panel-game" role="tabpanel" aria-labelledby="tab-game" hidden>
     <div class="split">
-      <div class="controls" style="margin-top:0">
-        <div class="field">
-          <label for="game-moves">Moves or PGN</label>
-          <textarea id="game-moves" spellcheck="false">1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 g6 6. f3 Nc6 7. Be3 Bg7 8. Qd2 Qa5 9. O-O-O Nxd4 10. Bxd4 a6 11. Bc4 Qc7 12. Bb3 Be6 13. Kb1 Rd8 14. g4 Rc8</textarea>
+      <div>
+        <div class="board-frame">
+          <div class="board" id="game-board" aria-label="The position of the move under the pointer"></div>
         </div>
-        <div class="field">
-          <label>Review for</label>
-          <div class="segmented" id="game-side" role="group" aria-label="Which side to review">
-            <button data-side="white" aria-pressed="false">White</button>
-            <button data-side="black" aria-pressed="false">Black</button>
-            <button data-side="both" aria-pressed="true">Both</button>
+        <div class="board-status">
+          <span id="game-board-note">Hover a move to see it</span>
+          <span class="eval" id="game-eval"></span>
+        </div>
+        <ul class="cue-legend">
+          <li class="move">played</li>
+          <li class="plan">engine's choice</li>
+          <li class="hint">hover a move · click to pin</li>
+        </ul>
+
+        <div class="controls">
+          <div class="field">
+            <label for="game-moves">Moves or PGN</label>
+            <textarea id="game-moves" spellcheck="false">1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 g6 6. f3 Nc6 7. Be3 Bg7 8. Qd2 Qa5 9. O-O-O Nxd4 10. Bxd4 a6 11. Bc4 Qc7 12. Bb3 Be6 13. Kb1 Rd8 14. g4 Rc8</textarea>
           </div>
+          <div class="field">
+            <label>Review for</label>
+            <div class="segmented" id="game-side" role="group" aria-label="Which side to review">
+              <button data-side="white" aria-pressed="false">White</button>
+              <button data-side="black" aria-pressed="false">Black</button>
+              <button data-side="both" aria-pressed="true">Both</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="game-depth">Depth</label>
+            <select id="game-depth"></select>
+          </div>
+          <div class="btn-row">
+            <button class="btn" id="game-go">Review game</button>
+          </div>
+          <div class="status-line" id="game-status"></div>
         </div>
-        <div class="field">
-          <label for="game-depth">Depth</label>
-          <select id="game-depth"></select>
-        </div>
-        <div class="btn-row">
-          <button class="btn" id="game-go">Review game</button>
-        </div>
-        <div class="status-line" id="game-status"></div>
       </div>
 
       <div class="report" id="game-report">
@@ -136,6 +178,14 @@
           <span id="play-status-text">Your move</span>
           <span class="eval" id="play-last"></span>
         </div>
+        <ul class="cue-legend">
+          <li class="move">move</li>
+          <li class="plan">plan</li>
+          <li class="attack">attack</li>
+          <li class="support">defence</li>
+          <li class="threat">threat</li>
+          <li class="hint">hover a statement · click to pin</li>
+        </ul>
 
         <div class="controls">
           <div class="row">

@@ -102,7 +102,9 @@ def test_saving_a_hanging_queen_defuses_the_threat(search_engine, raw_engine):
     )
     assert facts.threat_before is not None
     assert facts.threat_before.san == "Rxd5"
-    assert any("queen" in item and "d5" in item for item in facts.neutralised)
+    assert any(
+        "queen" in item.text and "d5" in item.text for item in facts.neutralised
+    )
 
 
 def test_perspective_of_the_side_not_to_move_uses_a_free_tempo(

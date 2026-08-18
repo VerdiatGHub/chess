@@ -7,15 +7,16 @@ language layer downstream is only allowed to verbalise these facts.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 import chess
 import chess.engine
 
 from .assess import Assessment
 from .concepts import Concept, describe_concepts
+from .cues import Cue, Insight, arrow, cue, move_cue
 from .engine import EvalTrace, RawEngine
-from .motifs import describe_relations, describe_tactics
+from .motifs import relation_insights, tactic_insights
 from .plans import Purpose, explain_move
 from .roles import Role, describe_roles
 from .values import MATE_SCORE, PIECE_VALUE, piece_name, with_turn
@@ -90,10 +91,27 @@ class Candidate:
     cp_white: int
     mate: Optional[int]
     pv_san: str
+    cue: Cue = field(default_factory=Cue)
 
     @property
     def is_mate(self) -> bool:
         return self.mate is not None
+
+
+def candidate_cue(board: chess.Board, pv: Sequence[chess.Move], *, depth: int = 3) -> Cue:
+    """The move to play, then the line it leads to.
+
+    The continuation is drawn as plans rather than moves, because only the first
+    move is the recommendation; the rest is what the search expects to follow.
+    """
+    if not pv:
+        return Cue()
+    first = pv[0]
+    arrows = [arrow(first.from_square, first.to_square, "move")]
+    arrows += [
+        arrow(move.from_square, move.to_square, "plan") for move in pv[1:depth]
+    ]
+    return cue(actors=[first.from_square], zone=[first.to_square], arrows=arrows)
 
 
 @dataclass(frozen=True)
@@ -113,6 +131,7 @@ class Threat:
     free_tempo: bool
     captures: Optional[str] = None
     gain_cp: int = 0
+    cue: Cue = field(default_factory=Cue)
 
     @property
     def is_mate(self) -> bool:
@@ -138,6 +157,7 @@ class HangingPiece:
     color: chess.Color
     loss_cp: int
     capture_san: str
+    cue: Cue = field(default_factory=Cue)
 
 
 @dataclass(frozen=True)
@@ -150,6 +170,10 @@ class Contribution:
     value: float
     delta: Optional[float] = None
 
+    @property
+    def cue(self) -> Cue:
+        return cue(actors=[self.square])
+
 
 @dataclass
 class PositionFacts:
@@ -161,15 +185,15 @@ class PositionFacts:
     candidates: List[Candidate] = field(default_factory=list)
     threat_before: Optional[Threat] = None
     threat_after_best: Optional[Threat] = None
-    neutralised: List[str] = field(default_factory=list)
-    created: List[str] = field(default_factory=list)
+    neutralised: List[Insight] = field(default_factory=list)
+    created: List[Insight] = field(default_factory=list)
     hanging: List[HangingPiece] = field(default_factory=list)
     contributions: List[Contribution] = field(default_factory=list)
     purposes: List[Purpose] = field(default_factory=list)
     roles: List[Role] = field(default_factory=list)
     concepts: List[Concept] = field(default_factory=list)
-    observations: List[str] = field(default_factory=list)
-    tactics: List[str] = field(default_factory=list)
+    observations: List[Insight] = field(default_factory=list)
+    tactics: List[Insight] = field(default_factory=list)
     note: Optional[str] = None
 
     @property
@@ -197,6 +221,7 @@ def find_hanging(board: chess.Board) -> List[HangingPiece]:
                 color=not board.turn,
                 loss_cp=gain,
                 capture_san=board.san(move),
+                cue=move_cue(move, targets=[move.to_square]),
             )
         )
     found.sort(key=lambda h: h.loss_cp, reverse=True)
@@ -243,6 +268,11 @@ def threat_of_side_to_move(
         free_tempo=free_tempo,
         captures=captures,
         gain_cp=gain,
+        cue=move_cue(
+            move,
+            tone="threat",
+            targets=[move.to_square] if board.piece_at(move.to_square) else [],
+        ),
     )
 
 
@@ -325,7 +355,7 @@ def analyse_position(
         ),
         roles=describe_roles(board, perspective),
         concepts=describe_concepts(board),
-        observations=describe_relations(board),
+        observations=relation_insights(board),
     )
 
     if board.is_game_over():
@@ -345,7 +375,7 @@ def analyse_position(
             return facts
         view = hand_tempo(board)
 
-    facts.tactics = describe_tactics(view)
+    facts.tactics = tactic_insights(view)
 
     infos = engine.analyse(view, limit, multipv=multipv)
     for rank, info in enumerate(infos, start=1):
@@ -360,6 +390,7 @@ def analyse_position(
                 cp_white=score_cp(info),
                 mate=mate_in(info),
                 pv_san=view.variation_san(pv[:8]),
+                cue=candidate_cue(view, pv),
             )
         )
         if rank == 1:
@@ -395,7 +426,7 @@ def _diff_threats(
     before: chess.Board,
     after: chess.Board,
     threat_before: Optional[Threat],
-) -> tuple[List[str], List[str]]:
+) -> tuple[List[Insight], List[Insight]]:
     """Which enemy targets the move takes off the board, and which it creates."""
     if not before.is_check():
         before_targets = {h.square: h for h in find_hanging(hand_tempo(before))}
@@ -404,17 +435,28 @@ def _diff_threats(
     after_targets = {h.square: h for h in find_hanging(after)}
 
     neutralised = [
-        f"{item.piece_name} on {square} is no longer loose"
+        Insight(
+            f"{item.piece_name} on {square} is no longer loose",
+            cue(friends=[square]),
+        )
         for square, item in before_targets.items()
         if square not in after_targets
     ]
     created = [
-        f"{item.piece_name} on {square} becomes loose ({item.loss_cp / 100:.2f})"
+        Insight(
+            f"{item.piece_name} on {square} becomes loose ({item.loss_cp / 100:.2f})",
+            item.cue,
+        )
         for square, item in after_targets.items()
         if square not in before_targets
     ]
     if threat_before is not None and not threat_before.is_mate:
         still_legal = chess.Move.from_uci(threat_before.uci) in after.legal_moves
         if not still_legal:
-            neutralised.append(f"{threat_before.san} is no longer available")
+            neutralised.append(
+                Insight(
+                    f"{threat_before.san} is no longer available",
+                    threat_before.cue,
+                )
+            )
     return neutralised, created

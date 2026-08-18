@@ -150,3 +150,109 @@ def test_coordinates_sit_on_the_near_and_bottom_edges():
         ranks = {c["square"] for c in cells if c["showRank"]}
         assert files == {f"{f}{home_rank}" for f in "abcdefgh"}
         assert ranks == {f"{near_file}{r}" for r in range(1, 9)}
+
+
+# ---------------- the cue overlay ----------------
+
+
+def centers(flipped: bool) -> dict:
+    """Every square's centre in the overlay's 8x8 coordinate space."""
+    return run_js(
+        f"""
+        const out = {{}};
+        for (const cell of B.boardOrder({str(flipped).lower()})) {{
+          out[cell.square] = B.squareCenter(cell.square, {str(flipped).lower()});
+        }}
+        console.log(JSON.stringify(out));
+        """
+    )
+
+
+def test_arrows_land_on_the_squares_the_grid_actually_draws():
+    """The overlay and the grid must agree, or every arrow is subtly misplaced.
+
+    `boardOrder` decides where a square is drawn; `squareCenter` decides where an
+    arrow ends. They are separate pieces of arithmetic, so this pins the second
+    to the first: the nth cell of the grid sits in row n/8, column n%8, and its
+    centre must be the middle of that cell.
+    """
+    for flipped in (False, True):
+        cells = run_js(
+            f"console.log(JSON.stringify(B.boardOrder({str(flipped).lower()})));"
+        )
+        middles = centers(flipped)
+        for index, cell in enumerate(cells):
+            expected = {"x": index % 8 + 0.5, "y": index // 8 + 0.5}
+            assert middles[cell["square"]] == expected, cell["square"]
+
+
+def test_a_square_that_does_not_exist_has_no_centre():
+    for bad in ("", "e9", "j4", "e0"):
+        assert run_js(
+            f"console.log(JSON.stringify(B.squareCenter({bad!r}, false)));"
+        ) is None
+
+
+def test_an_arrow_stops_short_of_both_pieces_it_connects():
+    """Neither end reaches the square centre, so both pieces stay visible."""
+    line = run_js("console.log(JSON.stringify(B.arrowGeometry('a1', 'a8', false)));")
+    start = centers(False)["a1"]
+    end = centers(False)["a8"]
+
+    # Same file, so the arrow is vertical and only the rank shifts.
+    assert line["x1"] == start["x"]
+    assert line["x2"] == end["x"]
+    # a1 is at the bottom, a8 at the top, so the line runs upwards.
+    assert line["y1"] < start["y"]
+    assert line["y2"] > end["y"]
+    # The head is pulled in further than the tail, to clear the piece.
+    assert start["y"] - line["y1"] < line["y2"] - end["y"]
+
+
+def test_an_arrow_shorter_than_its_own_gaps_is_refused():
+    """A line pulled in from both ends by more than its length would invert.
+
+    Squares one apart are the closest the board gets, and they are still longer
+    than the default gaps, so this has to be asked for with wider ones.
+    """
+    assert run_js(
+        "console.log(JSON.stringify(B.arrowGeometry('a1', 'a2', false)));"
+    ) is not None
+    assert run_js(
+        "console.log(JSON.stringify(B.arrowGeometry('a1', 'a2', false, "
+        "{tailGap: 0.6, headGap: 0.6})));"
+    ) is None
+
+
+def test_an_arrow_to_the_same_square_is_refused():
+    assert run_js(
+        "console.log(JSON.stringify(B.arrowGeometry('d4', 'd4', false)));"
+    ) is None
+
+
+def test_an_arrow_with_a_nonsense_square_is_refused():
+    assert run_js(
+        "console.log(JSON.stringify(B.arrowGeometry('d4', 'zz', false)));"
+    ) is None
+
+
+def test_flipping_the_board_flips_the_arrows_with_it():
+    white = run_js("console.log(JSON.stringify(B.arrowGeometry('a1', 'a8', false)));")
+    black = run_js("console.log(JSON.stringify(B.arrowGeometry('a1', 'a8', true)));")
+    # Turning the board round mirrors both axes, so the same claim is drawn from
+    # the opposite corner rather than being redrawn from scratch.
+    for axis in ("x1", "y1", "x2", "y2"):
+        assert black[axis] == pytest.approx(8 - white[axis]), axis
+
+
+def test_a_diagonal_arrow_keeps_its_direction():
+    line = run_js("console.log(JSON.stringify(B.arrowGeometry('a1', 'h8', false)));")
+    # a1 is bottom left and h8 top right, so x grows as y shrinks.
+    assert line["x2"] > line["x1"]
+    assert line["y2"] < line["y1"]
+
+
+def test_a_knight_move_is_long_enough_to_draw():
+    # The shortest arrow the UI ever needs: two squares and one across.
+    line = run_js("console.log(JSON.stringify(B.arrowGeometry('g1', 'f3', false)));")
+    assert line is not None

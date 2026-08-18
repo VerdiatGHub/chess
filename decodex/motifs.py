@@ -13,6 +13,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 import chess
 
+from .cues import Cue, Insight, arrow, between, cue
 from .values import (
     PIECE_VALUE,
     color_word,
@@ -94,6 +95,18 @@ class Alignment:
             f"behind it, by the {color_word(self.by)} {attacker}"
         )
 
+    def cue(self) -> Cue:
+        """The attacker, both victims, and the line the three stand on."""
+        return cue(
+            actors=[self.attacker],
+            targets=[self.near, self.far],
+            zone=between(self.attacker, self.far),
+            arrows=[arrow(self.attacker, self.far, "attack")],
+        )
+
+    def insight(self, board: chess.Board) -> Insight:
+        return Insight(self.describe(board), self.cue())
+
 
 def find_alignments(board: chess.Board, by: Optional[chess.Color] = None) -> List[Alignment]:
     """Pins and skewers currently on the board.
@@ -161,6 +174,19 @@ class Battery:
             text += f", aimed at {describe_piece(board, self.target)}"
         return text
 
+    def cue(self) -> Cue:
+        """Both sliders, plus the arrow along the line they share."""
+        far = self.target if self.target is not None else self.front
+        return cue(
+            actors=[self.rear, self.front],
+            targets=[self.target] if self.target is not None else [],
+            zone=between(self.rear, far),
+            arrows=[arrow(self.rear, far, "support" if self.target is None else "attack")],
+        )
+
+    def insight(self, board: chess.Board) -> Insight:
+        return Insight(self.describe(board), self.cue())
+
 
 def find_batteries(board: chess.Board, color: Optional[chess.Color] = None) -> List[Battery]:
     """Stacked sliders, one pair per line.
@@ -214,6 +240,17 @@ class Relation:
             f"{describe_piece(board, self.object)}"
         )
 
+    def cue(self) -> Cue:
+        return cue(
+            actors=[self.subject],
+            targets=[self.object] if self.kind == "attack" else [],
+            friends=[self.object] if self.kind == "support" else [],
+            arrows=[arrow(self.subject, self.object, self.kind)],
+        )
+
+    def insight(self, board: chess.Board) -> Insight:
+        return Insight(self.describe(board), self.cue())
+
 
 def _defenders(board: chess.Board, square: chess.Square) -> List[chess.Square]:
     piece = board.piece_at(square)
@@ -261,12 +298,12 @@ def notable_relations(
     return unique
 
 
-def describe_relations(
+def relation_insights(
     board: chess.Board, *, perspective: Optional[chess.Color] = None, limit: int = 6
-) -> List[str]:
-    """The "Pay attention to" list: contact between pieces, in words."""
+) -> List[Insight]:
+    """The "Pay attention to" list: contact between pieces, with its geometry."""
     return [
-        relation.describe(board)
+        relation.insight(board)
         for relation in notable_relations(board, perspective=perspective, limit=limit)
     ]
 
@@ -276,7 +313,8 @@ class Fork:
     """One move putting two or more valuable enemy pieces under attack.
 
     Target names are resolved when the fork is found, because they describe the
-    position *after* the move, which the reporting layer does not hold.
+    position *after* the move, which the reporting layer does not hold. The
+    squares are kept alongside for the same reason.
     """
 
     uci: str
@@ -284,10 +322,26 @@ class Fork:
     targets: Tuple[str, ...]
     value_cp: int
     gives_check: bool
+    origin: chess.Square
+    landing: chess.Square
+    target_squares: Tuple[chess.Square, ...] = ()
 
     def describe(self) -> str:
         prefix = "checks and forks" if self.gives_check else "forks"
         return f"{self.san} {prefix} {join_words(self.targets)}"
+
+    def cue(self) -> Cue:
+        """The move itself, then a fan of arrows from the square it lands on."""
+        return cue(
+            actors=[self.origin],
+            zone=[self.landing],
+            targets=self.target_squares,
+            arrows=[arrow(self.origin, self.landing, "move")]
+            + [arrow(self.landing, target, "attack") for target in self.target_squares],
+        )
+
+    def insight(self) -> Insight:
+        return Insight(self.describe(), self.cue())
 
 
 def _is_worth_forking(
@@ -339,6 +393,9 @@ def find_forks(board: chess.Board, *, limit: int = 4) -> List[Fork]:
                 targets=tuple(short_piece(after, square) for square in targets),
                 value_cp=value,
                 gives_check=after.is_check(),
+                origin=move.from_square,
+                landing=move.to_square,
+                target_squares=tuple(targets),
             )
         )
     found.sort(key=lambda fork: (fork.gives_check, fork.value_cp), reverse=True)
@@ -353,9 +410,28 @@ class DiscoveredAttack:
     san: str
     unveiled: str
     target: str
+    origin: chess.Square
+    landing: chess.Square
+    slider: chess.Square
+    target_square: chess.Square
 
     def describe(self) -> str:
         return f"{self.san} uncovers the {self.unveiled}, hitting the {self.target}"
+
+    def cue(self) -> Cue:
+        """The piece that steps aside, and the line it opens behind itself."""
+        return cue(
+            actors=[self.origin, self.slider],
+            zone=[self.landing] + between(self.slider, self.target_square),
+            targets=[self.target_square],
+            arrows=[
+                arrow(self.origin, self.landing, "move"),
+                arrow(self.slider, self.target_square, "attack"),
+            ],
+        )
+
+    def insight(self) -> Insight:
+        return Insight(self.describe(), self.cue())
 
 
 def find_discovered_attacks(board: chess.Board, *, limit: int = 3) -> List[DiscoveredAttack]:
@@ -399,6 +475,10 @@ def find_discovered_attacks(board: chess.Board, *, limit: int = 3) -> List[Disco
                         san=board.san(move),
                         unveiled=short_piece(after, slider),
                         target=short_piece(after, square),
+                        origin=move.from_square,
+                        landing=move.to_square,
+                        slider=slider,
+                        target_square=square,
                     )
                 )
                 break
@@ -407,7 +487,7 @@ def find_discovered_attacks(board: chess.Board, *, limit: int = 3) -> List[Disco
     return found[:limit]
 
 
-def describe_tactics(board: chess.Board, *, limit: int = 6) -> List[str]:
+def tactic_insights(board: chess.Board, *, limit: int = 6) -> List[Insight]:
     """Every motif on the board or one move away, for the side to move.
 
     Standing geometry comes first: a pin that already exists is more use to a
@@ -415,13 +495,13 @@ def describe_tactics(board: chess.Board, *, limit: int = 6) -> List[str]:
     no target are dropped, since two rooks stacked on a closed file are a fact
     without being a feature.
     """
-    lines: List[str] = []
-    lines.extend(item.describe(board) for item in find_alignments(board))
-    lines.extend(
-        item.describe(board)
+    found: List[Insight] = []
+    found.extend(item.insight(board) for item in find_alignments(board))
+    found.extend(
+        item.insight(board)
         for item in find_batteries(board)
         if item.target is not None
     )
-    lines.extend(item.describe() for item in find_forks(board))
-    lines.extend(item.describe() for item in find_discovered_attacks(board))
-    return lines[:limit]
+    found.extend(item.insight() for item in find_forks(board))
+    found.extend(item.insight() for item in find_discovered_attacks(board))
+    return found[:limit]

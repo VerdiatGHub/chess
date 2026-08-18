@@ -109,7 +109,14 @@ uvicorn decodex.web:create_app --factory --port 8000
 
 Then open <http://localhost:8000>. Three tabs matching the CLI: a position to
 decode, a game to review, and a game against the bot with analysis available
-mid-game.
+mid-game. There is a light and a dark theme, remembered between visits.
+
+Every statement is also drawn: hover a line and the squares it was derived from
+light up on the board, with arrows for the moves, attacks and defences it names.
+Click to pin it, which is how it works on a touchscreen. The geometry comes from
+the same detector that wrote the sentence, so the drawing cannot disagree with
+the words — and a fact with nothing to point at draws nothing rather than
+guessing.
 
 The board uses lichess's cburnett piece set (`decodex/static/pieces/`, CC-BY-SA)
 on their standard brown squares, rather than Unicode chess glyphs, which render

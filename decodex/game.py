@@ -11,6 +11,7 @@ import chess
 import chess.engine
 import chess.pgn
 
+from .cues import Cue, cue, move_arrow
 from .facts import MATE_SCORE, mate_in, score_cp
 
 
@@ -103,6 +104,21 @@ class MoveReview:
             else self.second_best_cp_white - self.cp_before_white
         )
         return min(max(0, gap), MAX_LOSS_CP)
+
+    @property
+    def cue(self) -> Cue:
+        """The move as played, and the engine's choice when it differed.
+
+        Two arrows on one board is exactly the comparison a turning point is
+        making, so they are drawn together rather than in sequence.
+        """
+        played = chess.Move.from_uci(self.uci)
+        arrows = [move_arrow(played, "move")]
+        if not self.played_best:
+            arrows.append(move_arrow(chess.Move.from_uci(self.best_uci), "plan"))
+        return cue(
+            actors=[played.from_square], zone=[played.to_square], arrows=arrows
+        )
 
 
 @dataclass

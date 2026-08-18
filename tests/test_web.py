@@ -55,9 +55,71 @@ def test_position_returns_facts_for_one_side(client):
     assert view["candidates"]
     assert view["candidates"][0]["san"]
     # The pin is board geometry, so it must be present regardless of depth.
-    assert any("pinned" in line for line in view["tactics"])
+    assert any("pinned" in item["text"] for item in view["tactics"])
     assert view["roles"]
     assert view["observations"]
+
+
+def test_every_served_fact_carries_the_squares_it_came_from(client):
+    """A fact the UI cannot draw is a fact the reader has to take on trust.
+
+    Anything with a cue must name real squares, and the lists whose geometry is
+    never in doubt — a move has a from and a to — must actually carry one.
+    """
+    view = client.post(
+        "/api/position", json={"fen": DRAGON, "side": "white", "depth": 10}
+    ).json()["views"][0]
+
+    squares = {f"{file}{rank}" for file in "abcdefgh" for rank in range(1, 9)}
+
+    def check(cue):
+        for mark in cue["marks"]:
+            assert mark["square"] in squares
+            assert mark["tone"] in {"actor", "target", "friend", "zone"}
+        for arrow in cue["arrows"]:
+            assert arrow["from"] in squares
+            assert arrow["to"] in squares
+            assert arrow["from"] != arrow["to"]
+            assert arrow["tone"] in {"move", "plan", "attack", "support", "threat"}
+
+    drawable = 0
+    for key in (
+        "candidates",
+        "purposes",
+        "tactics",
+        "observations",
+        "roles",
+        "concepts",
+        "hanging",
+        "neutralised",
+        "created",
+        "contributions",
+    ):
+        for item in view[key]:
+            assert "cue" in item, key
+            check(item["cue"])
+            drawable += bool(item["cue"]["marks"] or item["cue"]["arrows"])
+
+    assert drawable, "nothing in the position could be drawn at all"
+    # A candidate move always has two squares, so it is never undrawable.
+    for candidate in view["candidates"]:
+        assert candidate["cue"]["arrows"]
+    check(view["threatBefore"]["cue"])
+
+
+def test_a_reviewed_move_is_drawn_from_where_it_was_played(client):
+    body = client.post(
+        "/api/game", json={"moves": "e4 e5 Bc4 Nc6 Qh5 Nf6 Qxf7#", "depth": 8}
+    ).json()
+    first = body["moves"][0]
+    assert first["san"] == "e4"
+    drawn = {(a["from"], a["to"]): a["tone"] for a in first["cue"]["arrows"]}
+    assert drawn[("e2", "e4")] == "move"
+    # A move the engine would not have chosen is shown next to the one it wanted.
+    for move in body["moves"]:
+        arrows = {(a["from"], a["to"]): a["tone"] for a in move["cue"]["arrows"]}
+        assert list(arrows.values()).count("move") == 1
+        assert ("plan" in arrows.values()) is not move["playedBest"]
 
 
 def test_position_can_report_both_sides(client):
@@ -254,7 +316,7 @@ def test_lean_mode_serves_every_fact_except_the_nnue_panel(engine_path, monkeypa
         assert view["evalCp"] is not None
         assert "advantage" in view["summary"]
         assert view["candidates"]
-        assert any("pinned" in line for line in view["tactics"])
+        assert any("pinned" in item["text"] for item in view["tactics"])
         assert view["roles"]
         assert view["concepts"]
         assert view["observations"]

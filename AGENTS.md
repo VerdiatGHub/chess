@@ -12,6 +12,8 @@ Leaf first, so the dependency direction is one-way:
 
 - `decodex/values.py` — piece values, naming helpers, `with_turn`. Imports nothing
   of ours, so every other module can use it.
+- `decodex/cues.py` — `Cue`, `Mark`, `Arrow`, `Insight`: the squares behind a
+  statement. Also a leaf, since every detector attaches one.
 - `decodex/assess.py` — evaluation to verdict sentence ("a decisive advantage").
 - `decodex/motifs.py` — pins, skewers, batteries, forks, discovered attacks,
   attack/support relations. Pure geometry, written from scratch.
@@ -41,10 +43,13 @@ Web service:
 
 ## Environment
 
-- Stockfish is not in apt here. Installed 17.1 from the official GitHub release
-  to `/usr/local/bin/stockfish` (avx2 build; the CPU has avx2/bmi2/avx512f).
+- Stockfish is not in apt here. Install 17.1 from the official GitHub release
+  (avx2 build; the CPU has avx2/bmi2/avx512f). `/usr/local/bin` is not writable,
+  so `~/.local/bin/stockfish` plus `DECODEX_ENGINE` is the working arrangement.
 - `pip install -e ".[dev]"`, then `pytest`. Tests needing the engine are marked
   `engine`, so `pytest -m "not engine"` runs the rules-only subset.
+- Run the UI with `uvicorn decodex.web:create_app --factory`. There is no module
+  level `app`, so plain `decodex.web:app` fails.
 
 ## Things learned the hard way
 
@@ -130,6 +135,27 @@ Web service:
   and are what made the original board look broken.
 - **Highlight with flat washes, not inset borders.** An `inset box-shadow` under
   an absolutely positioned piece reads as a rendering artefact.
+
+## Cues: showing a fact as well as saying it
+
+- **The geometry comes from the detector, never from the sentence.** A drawn arrow
+  is another claim about the position. Parsing squares back out of the prose would
+  reintroduce the guessing the rest of the project exists to avoid, so every
+  detector returns its squares next to the words in a `Cue`.
+- **An empty cue is a legitimate answer.** A concept about the whole position has
+  nothing to point at; the UI then draws nothing rather than inventing a target.
+  `Cue.__bool__` exists for exactly that check.
+- **Four mark tones and five arrow tones, no more.** A reader learns a small
+  vocabulary; twenty colours is decoration. Both are validated in `__post_init__`,
+  so a typo fails at construction rather than rendering silently.
+- **First tone wins per square.** Detectors pass the most specific role first, so
+  a square that is both the actor and part of the swept line reads as the actor.
+- **`squareCenter` must agree with `boardOrder`.** The grid and the arrow overlay
+  are separate arithmetic; `tests/test_board_js.py` pins the overlay to the grid
+  cell by cell, in both orientations, because an off-by-one here is invisible.
+- **Arrows stop short of both squares**, further at the head, or they hide the very
+  pieces they are about. Shorter than the two gaps combined and the line would
+  invert, so `arrowGeometry` returns null instead.
 
 ## Hosting reality, early 2026
 

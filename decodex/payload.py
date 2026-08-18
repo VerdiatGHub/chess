@@ -1,8 +1,9 @@
 """Facts as plain data, for the HTTP layer.
 
 The report module renders facts as text for a terminal. The web UI needs the same
-facts as JSON so the browser can lay them out. Both read the same dataclasses, so
-neither can invent anything the other does not have.
+facts as JSON so the browser can lay them out — and, because every fact carries
+the squares it was derived from, draw them on the board. Both read the same
+dataclasses, so neither can invent anything the other does not have.
 """
 
 from __future__ import annotations
@@ -12,9 +13,27 @@ from typing import Any, Dict, List, Optional
 import chess
 
 from .concepts import Concept
+from .cues import Cue, Insight
 from .facts import PositionFacts
 from .game import GameReview, MoveReview
 from .values import side_word
+
+
+def _cue(cue: Optional[Cue]) -> Dict[str, Any]:
+    """A cue as the browser wants it: squares to light, arrows to draw."""
+    if cue is None:
+        return {"marks": [], "arrows": []}
+    return {
+        "marks": [{"square": mark.square, "tone": mark.tone} for mark in cue.marks],
+        "arrows": [
+            {"from": item.origin, "to": item.target, "tone": item.tone}
+            for item in cue.arrows
+        ],
+    }
+
+
+def _insights(items: List[Insight]) -> List[Dict[str, Any]]:
+    return [{"text": item.text, "cue": _cue(item.cue)} for item in items]
 
 
 def _threat(threat) -> Optional[Dict[str, Any]]:
@@ -25,6 +44,7 @@ def _threat(threat) -> Optional[Dict[str, Any]]:
         "san": threat.san,
         "text": threat.describe(),
         "isMate": threat.is_mate,
+        "cue": _cue(threat.cue),
     }
 
 
@@ -35,6 +55,7 @@ def _concepts(concepts: List[Concept]) -> List[Dict[str, Any]]:
             "detail": concept.detail,
             "favours": side_word(concept.favours) if concept.favours is not None else None,
             "text": concept.describe(),
+            "cue": _cue(concept.cue()),
         }
         for concept in concepts
     ]
@@ -57,26 +78,33 @@ def position_payload(facts: PositionFacts) -> Dict[str, Any]:
                 "evalCp": candidate.cp_white,
                 "mate": candidate.mate,
                 "line": candidate.pv_san,
+                "cue": _cue(candidate.cue),
             }
             for candidate in facts.candidates
         ],
-        "purposes": [purpose.describe() for purpose in facts.purposes],
+        "purposes": [
+            {"text": purpose.describe(), "cue": _cue(purpose.cue)}
+            for purpose in facts.purposes
+        ],
         "threatBefore": _threat(facts.threat_before),
         "threatAfterBest": _threat(facts.threat_after_best),
-        "neutralised": list(facts.neutralised),
-        "created": list(facts.created),
-        "tactics": list(facts.tactics),
+        "neutralised": _insights(facts.neutralised),
+        "created": _insights(facts.created),
+        "tactics": _insights(facts.tactics),
         "hanging": [
             {
                 "square": item.square,
                 "piece": item.piece_name,
                 "captureSan": item.capture_san,
                 "lossCp": item.loss_cp,
+                "cue": _cue(item.cue),
             }
             for item in facts.hanging
         ],
-        "observations": list(facts.observations),
-        "roles": [role.describe() for role in facts.roles],
+        "observations": _insights(facts.observations),
+        "roles": [
+            {"text": role.describe(), "cue": _cue(role.cue())} for role in facts.roles
+        ],
         "concepts": _concepts(facts.concepts),
         "contributions": [
             {
@@ -84,6 +112,7 @@ def position_payload(facts: PositionFacts) -> Dict[str, Any]:
                 "piece": item.piece_name,
                 "value": item.value,
                 "delta": item.delta,
+                "cue": _cue(item.cue),
             }
             for item in facts.contributions
         ],
@@ -109,6 +138,7 @@ def _move_payload(move: MoveReview) -> Dict[str, Any]:
         "mateAfter": move.mate_after,
         "mateMissed": move.mate_missed,
         "secondBestSan": move.second_best_san,
+        "cue": _cue(move.cue),
     }
 
 
