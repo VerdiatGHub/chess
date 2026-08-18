@@ -459,7 +459,7 @@ body::before {
 }
 
 .arrow {
-  stroke-width: 0.13;
+  stroke-width: 0.08;
   stroke-linecap: round;
   fill: none;
 }
