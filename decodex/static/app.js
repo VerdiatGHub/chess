@@ -377,10 +377,6 @@ function cueBinder(board, onLabel) {
     };
     node.setAttribute("role", "button");
     node.setAttribute("aria-pressed", "false");
-    node.addEventListener("mouseenter", show);
-    node.addEventListener("mouseleave", hide);
-    node.addEventListener("focusin", show);
-    node.addEventListener("focusout", hide);
     node.addEventListener("click", toggle);
     node.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
@@ -599,13 +595,6 @@ function pvLine(candidate, bind = noBind, onSelect) {
     if (prefix) row.append(el("span", "pv-num", prefix));
     const move = el("button", "pv-move", ply.san);
     move.type = "button";
-    move.addEventListener("mouseenter", () => {
-      if (typeof bind.release === "function") bind.release(move);
-      if (onSelect) onSelect(ply, { preview: true });
-    });
-    move.addEventListener("focusin", () => {
-      if (onSelect) onSelect(ply, { preview: true });
-    });
     move.addEventListener("click", (event) => {
       event.stopPropagation();
       mark(move);
