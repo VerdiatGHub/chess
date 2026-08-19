@@ -388,12 +388,12 @@ function cueBinder(board, onLabel) {
     });
     return node;
   }
-  bind.release = (node) => {
-    if (pinned && pinned !== node) {
+  bind.release = () => {
+    if (pinned) {
       pinned.classList.remove("pinned");
       pinned.setAttribute("aria-pressed", "false");
     }
-    pinned = node || null;
+    pinned = null;
   };
   return bind;
 }
@@ -414,6 +414,19 @@ function renderPositionViews(target, views, depth, bind = noBind, onSelectPly) {
   });
 
   target.appendChild(fragment);
+  if (target._plyClick) {
+    target.removeEventListener("click", target._plyClick);
+    target._plyClick = null;
+  }
+  if (onSelectPly) {
+    target._plyClick = (event) => {
+      const button = event.target.closest(".pv-move");
+      if (!button || !target.contains(button) || !button._ply) return;
+      if (typeof bind.release === "function") bind.release();
+      onSelectPly(button._ply);
+    };
+    target.addEventListener("click", target._plyClick);
+  }
 }
 
 function createReportTabs(cards) {
@@ -593,21 +606,25 @@ function pvLine(candidate, bind = noBind, onSelect) {
       button.setAttribute("aria-current", String(active));
     });
   };
+  const choose = (button, ply, event) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    mark(button);
+    if (typeof bind.release === "function") bind.release(button);
+    if (onSelect) onSelect(ply);
+  };
   plies.forEach((ply, index) => {
     const prefix = plyLabel(ply, plies[index - 1]);
     if (prefix) row.append(el("span", "pv-num", prefix));
     const move = el("button", "pv-move", ply.san);
     move.type = "button";
-    move.addEventListener("click", (event) => {
-      event.stopPropagation();
-      mark(move);
-      if (typeof bind.release === "function") bind.release(move);
-      if (onSelect) onSelect(ply);
-    });
+    move._ply = ply;
+    move.addEventListener("click", (event) => choose(move, ply, event));
     buttons.push(move);
     row.append(move);
   });
-  if (onSelect && buttons[0]) mark(buttons[0]);
   return row;
 }
 
@@ -673,12 +690,13 @@ function positionCards(view, depth, bind = noBind, onSelectPly) {
     const lines = el("div", "lines");
     view.candidates.slice(1).forEach((c) => {
       const line = el("div", "line");
-      line.append(el("span", "move", `${c.rank}. ${c.san}`));
+      const header = el("span", "move", `${c.rank}. ${c.san}`);
+      bind(header, c.cue);
+      line.append(header);
       line.append(el("span", "score", scoreText(c.evalCp, c.mate)));
       line.append(pvLine(c, bind, (ply) => {
         if (onSelectPly) onSelectPly(ply);
       }));
-      bind(line, c.cue);
       lines.append(line);
     });
     box.append(lines);
@@ -1033,17 +1051,21 @@ function wireTabs() {
 }
 
 function showLinePly(board, ply, { turn, preview } = {}) {
+  if (!ply) return;
   const before = ply.fenBefore || ply.fenAfter;
   const after = ply.fenAfter || ply.fenBefore;
+  const shown = before || after;
+  if (!shown) return;
   board.lastMove = ply.uci
     ? { from: ply.uci.slice(0, 2), to: ply.uci.slice(2, 4) }
     : null;
-  // Show the position the move is played from so castling still has a king
-  // and rook to draw. The cue arrows are the illustration of the ply.
-  board.setPosition(before || after);
-  board.showCue(ply.cue, before);
+  // Show the position the move is played from so the piece is still there
+  // to illustrate. The cue arrows are the illustration of the ply.
+  board.setPosition(shown);
+  board.showCue(ply.cue, shown);
+  const fenBox = $("pos-fen");
+  if (fenBox) fenBox.value = shown;
   if (turn) {
-    const shown = before || after || "";
     const side = (shown.split(" ")[1] === "b") ? "Black" : "White";
     const mode = preview ? "preview" : "showing";
     turn.textContent = `${side} to move · ${mode} ${plyCaption(ply)}`;
