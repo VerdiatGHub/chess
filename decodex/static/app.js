@@ -377,7 +377,10 @@ function cueBinder(board, onLabel) {
     };
     node.setAttribute("role", "button");
     node.setAttribute("aria-pressed", "false");
-    node.addEventListener("click", toggle);
+    node.addEventListener("click", (event) => {
+      if (event.target.closest(".pv-move")) return;
+      toggle();
+    });
     node.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
@@ -1030,16 +1033,18 @@ function wireTabs() {
 }
 
 function showLinePly(board, ply, { turn, preview } = {}) {
+  const before = ply.fenBefore || ply.fenAfter;
   const after = ply.fenAfter || ply.fenBefore;
   board.lastMove = ply.uci
     ? { from: ply.uci.slice(0, 2), to: ply.uci.slice(2, 4) }
     : null;
-  // DecodeChess shows the position after the clicked ply, with that ply's
-  // arrow still drawn on the resulting board.
-  board.setPosition(after);
-  board.showCue(ply.cue);
+  // Show the position the move is played from so castling still has a king
+  // and rook to draw. The cue arrows are the illustration of the ply.
+  board.setPosition(before || after);
+  board.showCue(ply.cue, before);
   if (turn) {
-    const side = (after.split(" ")[1] === "b") ? "Black" : "White";
+    const shown = before || after || "";
+    const side = (shown.split(" ")[1] === "b") ? "Black" : "White";
     const mode = preview ? "preview" : "showing";
     turn.textContent = `${side} to move · ${mode} ${plyCaption(ply)}`;
   }

@@ -13,7 +13,7 @@ and the UI draws nothing.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Sequence, Tuple, Union
+from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
 import chess
 
@@ -133,15 +133,38 @@ def move_arrow(move: chess.Move, tone: str = "move") -> Arrow:
     return arrow(move.from_square, move.to_square, tone)
 
 
+def _rook_castling_arrow(move: chess.Move, tone: str) -> Optional[Arrow]:
+    """The rook's half of a castle. python-chess stores only the king move."""
+    if move.from_square == chess.E1 and move.to_square == chess.G1:
+        return arrow(chess.H1, chess.F1, tone)
+    if move.from_square == chess.E1 and move.to_square == chess.C1:
+        return arrow(chess.A1, chess.D1, tone)
+    if move.from_square == chess.E8 and move.to_square == chess.G8:
+        return arrow(chess.H8, chess.F8, tone)
+    if move.from_square == chess.E8 and move.to_square == chess.C8:
+        return arrow(chess.A8, chess.D8, tone)
+    return None
+
+
 def move_cue(
     move: chess.Move, *, tone: str = "move", targets: Sequence[SquareLike] = ()
 ) -> Cue:
     """A move as geometry: where it goes, and what it lands on."""
+    arrows = [move_arrow(move, tone)]
+    rook = _rook_castling_arrow(move, tone)
+    if rook is not None:
+        arrows.append(rook)
+        return cue(
+            actors=[move.from_square, rook.origin],
+            zone=[move.to_square, rook.target],
+            targets=targets,
+            arrows=arrows,
+        )
     return cue(
         actors=[move.from_square],
         zone=[move.to_square],
         targets=targets,
-        arrows=[move_arrow(move, tone)],
+        arrows=arrows,
     )
 
 
