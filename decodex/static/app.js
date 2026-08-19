@@ -672,7 +672,9 @@ function positionCards(view, depth, bind = noBind, onSelectPly) {
       const line = el("div", "line");
       line.append(el("span", "move", `${c.rank}. ${c.san}`));
       line.append(el("span", "score", scoreText(c.evalCp, c.mate)));
-      line.append(pvLine(c, bind));
+      line.append(pvLine(c, bind, (ply) => {
+        if (onSelectPly) onSelectPly(ply);
+      }));
       bind(line, c.cue);
       lines.append(line);
     });
